@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.verification/
+*.tsbuildinfo
+public/cesium/
+.env.local
+.env.*.local
