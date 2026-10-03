@@ -5,3 +5,5 @@ dist/
 public/cesium/
 .env.local
 .env.*.local
+.vercel/
+.vercel
