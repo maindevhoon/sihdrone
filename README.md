@@ -1,22 +1,28 @@
-# Aeron — Delhi observation lab
+# Aeron — Airspace observation trainer
 
-A React + Three.js prototype for the recognition and after-action-review portion of SIH26247. It runs locally in a desktop browser with keyboard and mouse. The fictional district takes visual cues from Delhi; it is not a geographic reconstruction.
+A React + Three.js prototype for the recognition and after-action-review portion of SIH26247. It is laid out as an operations console: mission setup on the left, the sensor view in the centre, and a situation panel (simulated radar, observation, classification and recognition cues) on the right. The fictional district takes visual cues from Delhi; it is not a geographic reconstruction.
 
 ## Try an exercise
 
 1. Choose **Skyline watch**, **Passing contact**, or **Mixed recognition**.
 2. Choose guided/challenge difficulty and daylight/dusk. Shuffle the variation for different reproducible motion and encounters.
-3. Select an overview, rooftop, or street-level camera. Drag to orbit and scroll to zoom.
-4. Press **Begin session**. The objects enter after a short delay. Click an aerial object or use **Mark observation**, then choose a category.
-5. Finish early, or let the 45-second clock finish automatically. The review explains the score, preserves the event timeline, and lets you replay or repeat the exact variation.
+3. Select an overview, rooftop, or street-level camera. Drag to orbit and scroll to zoom. The heading tape and radar show where to look.
+4. Press **Start exercise**. The objects enter after a short delay. Click an aircraft, click its radar track, or use **Mark observation**.
+5. The EO/IR sensor feed slews to the selected track. Confirm the type in the daylight (EO) or white-hot thermal (IR) view, then choose a category.
+6. End early, or let the 45-second clock finish automatically. The debrief explains the score, preserves the event timeline, and lets you replay or repeat the exact variation.
 
 Keyboard shortcuts outside form controls: **Space** pauses/resumes, **O** records an observation, and **1 / 2 / 3** classify. Changing browser tabs pauses an active exercise.
 
 ## Included
 
 - A textured 3D district with an India Gate-inspired arch, storefronts, rooftop equipment, balconies, trees, mixed road traffic, and an elevated metro.
-- Shared deterministic scenario logic for the 3D objects, north-up mini-radar, and replay. Radar contacts and the clock hold when paused. The observer indicator reflects camera heading.
-- Single drones, drone groups, and animated birds. Guided and challenge modes vary appearance timing, altitude, movement speed, and haze.
+- Shared deterministic scenario logic for the 3D objects, radar, sensor feed and replay. Radar contacts and the clock hold when paused. The observer indicator reflects camera heading.
+- Real-size contact models: an enterprise-class quadcopter (about 1.04 m tip to tip, skid gear, gimbal camera, two-blade propellers with motion-blur discs, red/green/white navigation lights and an anti-collision strobe) and a black kite (about 1.55 m wingspan, fingered primaries, forked tail), a common large bird over Delhi.
+- Attitude derived from the shared trajectory: multirotors tilt into acceleration and drag and roll into turns; kites bank more steeply, twist the tail, and alternate bursts of slow wingbeats with glides. No new randomness is introduced.
+- An EO/IR sensor feed that auto-tracks a radar-cued contact from a 3 m mast at the radar observer, with three fields of view, distance haze, a tracking gate and azimuth/elevation/range/FOV readouts. The IR palette renders motors and battery as hot spots on drones and the whole body as warm on birds.
+- Track identity on the radar follows the operator's assessment (unknown yellow, suspect UAS red, bird neutral green), never the scenario's ground truth.
+- A recognition-cue guide, expanded in guided mode and collapsed in challenge mode.
+- Guided and challenge modes vary appearance timing, altitude, movement speed, and haze.
 - Smooth camera transitions, fullscreen, and balanced/high graphics settings.
 - A score breakdown based on classification and observation time after object arrival. Classification earns credit only after a valid observation.
 - Up to 20 browser-local results, a chart of recorded scores, JSON result export, and recommendations from explicit rules.
@@ -35,23 +41,27 @@ The automated checks cover seeded reproduction, contact arrival, scoring edge ca
 
 ## Implementation
 
-- `src/simulation.ts`: seeded scenarios, positions, radar projection, scoring, and recommendations.
+- `src/simulation.ts`: seeded scenarios, positions, scoring, and recommendations.
+- `src/kinematics.ts`: velocity, heading, attitude, wingbeat and strobe timing derived from the shared trajectory.
+- `src/contactGeometry.ts`: real-size drone and kite builders shared by the scene, the sensor feed and the Earth-view GLBs.
 - `src/storage.ts`: versioned, validated browser-local history.
-- `src/App.tsx`: setup, the live simulation clock, controls, and session lifecycle.
-- `src/DelhiScene.tsx`: district geometry, vehicles, aerial objects, and camera motion.
-- `src/SceneView.tsx`: rendering, heading, graphics options, fullscreen, and scene overlays.
+- `src/App.tsx`: console layout, the live simulation clock, controls, and session lifecycle.
+- `src/DelhiScene.tsx`: district geometry, vehicles, and camera motion; `src/ContactModel.tsx` places contacts in it.
+- `src/SceneView.tsx`: renderer selection, HUD, heading tape, sensor panel, graphics options, and fullscreen.
+- `src/SensorFeed.tsx`: the EO/IR camera.
 - `src/Radar.tsx`: shared-position radar visualization.
+- `src/RecognitionGuide.tsx`: recognition cues.
 - `src/Review.tsx`: score explanation, deterministic replay, history, and export.
 
 The 3D renderer loads separately from the application interface. Shadows and resolution are capped in balanced mode.
 
 ## Prototype boundaries
 
-Scenario movement and the scoring rubric are illustrative. The prototype does not implement operational engagement training, validated drone physics, real sensor data, or a learned AI model. Recommendations use explicit rules. The training scene is generated locally. Earth view streams geographic data and requires internet access; fonts fall back to system fonts when offline. Browser-local results belong to this device/browser and are not synchronized to a server.
+Scenario movement, contact attitude, the sensor feed and the scoring rubric are illustrative. The EO/IR view is a rendered approximation, not a sensor model: it has no optics, detector noise or radiometric temperature model, and its background is sky only. The prototype does not implement operational engagement training, validated drone physics, real sensor data, or a learned AI model. Recommendations use explicit rules. The training scene is generated locally. Earth view streams geographic data and requires internet access; fonts fall back to system fonts when offline. Browser-local results belong to this device/browser and are not synchronized to a server.
 
 ## Earth view
 
-Earth view uses CesiumJS, centered near India Gate in New Delhi. Without a key it streams Esri World Imagery onto the Earth ellipsoid: this is satellite photography, **not reconstructed 3D buildings or elevation terrain**. The source label makes this distinction explicit. The local training scene remains available from the environment switch.
+The 3D district is the default environment; **Satellite** switches to Earth view. Earth view uses CesiumJS, centered near India Gate in New Delhi. Without a key it streams Esri World Imagery onto the Earth ellipsoid: this is satellite photography, **not reconstructed 3D buildings or elevation terrain**. The source label makes this distinction explicit. The local training scene remains available from the environment switch.
 
 For actual Google photorealistic 3D buildings, copy `.env.example` to `.env.local` and configure either `VITE_GOOGLE_MAPS_API_KEY` (Map Tiles API enabled, billing configured) or `VITE_CESIUM_ION_TOKEN` with Google Photorealistic 3D Tiles access. Restart the server. Browser credentials are visible to users: use allowed HTTP referrers and API restrictions, and never use a server secret. Credentials are excluded from Git. Coverage and detail depend on the provider; Delhi coverage has not been verified with an authenticated account.
 
@@ -60,7 +70,7 @@ Cesium integration: https://cesium.com/learn/cesiumjs-learn/cesiumjs-photorealis
 
 The Cesium assets are copied locally by predev/prebuild. Attribution remains visible. Google tiles use a bounded streaming cache, with satellite fallback for failed authentication. There is no geocoding/search integration. Training contacts remain synthetic and follow the same recorded scenario and radar coordinates; each training unit maps to eight metres in Earth view. Guided mode sets a minimum contact size for visibility. Camera altitude presets are illustrative; photorealistic mode assumes a Delhi ground datum near 215 m, not a surveyed collision or ground-height solution.
 
-`src/EarthScene.tsx` owns the geographic viewer and tears down its WebGL resources and callbacks on unmount. `scripts/create-contact-models.mjs` generates the original local GLB contact models; `scripts/prepare-cesium.mjs` prepares runtime assets.
+`src/EarthScene.tsx` owns the geographic viewer and tears down its WebGL resources and callbacks on unmount. It creates one contact entity per generated contact, orients each from the shared kinematics, and articulates kite wings through glTF node transformations. `node --import tsx scripts/create-contact-models.mjs` regenerates the GLB contact models from `src/contactGeometry.ts`; `scripts/prepare-cesium.mjs` prepares runtime assets.
 
 ## Radar and variation library
 
