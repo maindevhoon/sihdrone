@@ -42,7 +42,13 @@ test('readiness reaches Ready only when every milestone is met',()=>{
 test('CSV escapes values and lists sessions oldest first',()=>{
   const csv=historyCsv([session(2),session(1)]).split('\n');
   assert.equal(csv.length,3);
-  assert.ok(csv[0].startsWith('Date (UTC),Exercise'));
+  assert.ok(csv[0].startsWith('Date (UTC),Theatre,Exercise'));
   assert.ok(csv[1].startsWith('2026-10-01T08:01'));
   assert.ok(csv[1].includes(',Mixed recognition,guided,Day,'));
+});
+test('results group by theatre, with older sessions under Not recorded, and the CSV names the theatre',()=>{
+  const items=[{...session(1),theatre:'tololing' as const},{...session(2),theatre:'tololing' as const},session(3)];
+  const rows=summarize(items).byTheatre;
+  assert.deepEqual(rows.map(r=>[r.name,r.sessions]),[['Tololing',2],['Not recorded',1]]);
+  assert.ok(historyCsv(items).split('\n')[1].includes(',Tololing,'));
 });

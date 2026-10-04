@@ -1,4 +1,5 @@
 import { createScenario, scoreSession, type Session, type SessionEvent } from './simulation';
+import { THEATRES } from './theatres';
 export const STORAGE_KEY = 'aeron-sessions-v1';
 const eventTypes = ['start','observation','classification','pause','resume','finish'];
 function validEvent(value: unknown): value is SessionEvent {
@@ -12,6 +13,8 @@ function validSession(value: unknown): value is Session {
   const c = s.scenario;
   if (s.version !== 1 || typeof s.id !== 'string' || typeof s.createdAt !== 'string' || !Number.isFinite(Date.parse(s.createdAt)) || !c || !['skyline','passing','mixed'].includes(c.exercise) || !['guided','challenge'].includes(c.difficulty) || !Number.isInteger(c.seed) || c.seed < 0 || typeof c.dusk !== 'boolean' || !Number.isFinite(s.duration) || s.duration < 0 || s.duration > 45 || !(s.detection === null || Number.isFinite(s.detection)) || !['','Single drone','Drone group','Bird'].includes(s.answer) || !Array.isArray(s.events) || !s.events.every(validEvent)) return false;
   if(c.version!==1&&c.version!==2)return false;
+  // Optional and additive: older results without a theatre stay valid; unknown ids are rejected.
+  if(s.theatre!==undefined&&!THEATRES.some(t=>t.id===s.theatre))return false;
   const expected = createScenario(c.exercise,c.seed,c.difficulty,c.dusk,c.version);
   if (!Object.entries(expected).every(([key,value])=>c[key as keyof typeof c]===value)) return false;
   const scored=scoreSession(c,s.detection,s.answer,s.duration);

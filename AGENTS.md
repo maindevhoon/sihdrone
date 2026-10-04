@@ -71,6 +71,7 @@ node --import tsx scripts/create-contact-models.mjs
 - Keep the 200 numbered seed entries stable. Shuffle should cover a complete cycle without repeats and avoid repeating the current seed at a cycle boundary. Display the full seed so a variation can be reproduced.
 - All motion, radar trails, sweep animation, and recorded events use the exercise clock. Pause must freeze simulation time. An active exercise pauses when the document becomes hidden.
 - Observation time must fall after contact arrival and before the session ends to earn credit. Classification credit requires a valid observation.
+- Sessions may carry an optional `theatre` id (added without a version bump: older results without it remain valid, unknown ids are rejected). Keep it optional.
 - The trainee profile is stored separately under `aeron-profile-v1` and is not part of the session schema. Readiness milestones are illustrative practice targets; do not present them as an operational qualification.
 - Rotor audio must stay a function of exercise time and contact range, and fall silent whenever the clock stops.
 - Replay must not modify the saved session or its score. Handle malformed/unavailable browser storage without breaking the exercise; history currently retains up to 20 results.
