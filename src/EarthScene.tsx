@@ -2,12 +2,13 @@ import { useEffect, useRef, type MutableRefObject } from 'react';
 import {
   ArcGisMapServerImageryProvider, CallbackPositionProperty, CallbackProperty,
   BoundingSphere, Cartesian2, Cartesian3, Color, ConstantProperty, HeadingPitchRange, HeadingPitchRoll, ImageryLayer,
-  Ion, JulianDate, Math as CesiumMath, Matrix4, ScreenSpaceEventHandler,
+  Ion, JulianDate, Math as CesiumMath, Matrix4, NodeTransformationProperty, PropertyBag, Quaternion, ScreenSpaceEventHandler,
   ScreenSpaceEventType, Transforms, Viewer, createGooglePhotorealistic3DTileset,
   type Entity,
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { contactPosition, type CameraView, type Scenario } from './simulation';
+import { birdAttitude, contactKinematics, droneAttitude, wingBeat } from './kinematics';
 
 type Props = {
   scenario: Scenario; time: MutableRefObject<number>; selected: boolean;
@@ -59,26 +60,46 @@ export default function EarthScene(props: Props) {
       // One training-space unit represents eight real-world metres in Earth mode.
       return Matrix4.multiplyByPoint(frame(), new Cartesian3(x*8,-z*8,y*8), result || new Cartesian3());
     };
-    const contacts: Entity[] = Array.from({length:4}, (_, index) => viewer.entities.add({
-      id: `training-contact-${index}`,
-      position: new CallbackPositionProperty((_time, result) => contactPoint(index,result), false),
-      orientation: new CallbackProperty(() => Transforms.headingPitchRollQuaternion(contactPoint(index),new HeadingPitchRoll(.3+Math.sin(current.current.time.current*.12)*.5,0,Math.sin(current.current.time.current*.4+index)*.045)),false),
-      model: {
-        uri: '/models/drone.glb', scale: 2,
-        minimumPixelSize: 0, maximumScale: 6,
-        silhouetteColor: Color.fromCssColorString('#bceaa3'), silhouetteSize: 0,
-      },
-    }));
+    // Real-size airframes; Cesium enlarges them to a minimum on-screen size so they stay detectable.
+    const modelUri = () => `/models/${current.current.scenario.category==='Bird'?'bird':'drone'}.glb`;
+    const attitude = (index: number) => {
+      const {scenario,time} = current.current, k = contactKinematics(scenario, time.current, index);
+      return {k, a: scenario.category==='Bird' ? birdAttitude(k) : droneAttitude(k)};
+    };
+    // Wing elevation is applied to the named glTF wing nodes, about the airframe's forward axis.
+    const wing = (index: number, side: 1 | -1) => new NodeTransformationProperty({rotation: new CallbackProperty(() => {
+      const {scenario,time} = current.current;
+      return Quaternion.fromAxisAngle(Cartesian3.UNIT_Z, side*(scenario.category==='Bird' ? wingBeat(time.current, index).angle : 0));
+    }, false)});
+    const contacts: Entity[] = [];
+    // Entities are added on demand so every generated contact is represented, whatever the count.
+    const ensureContacts = (count: number) => {
+      while (contacts.length < count) {
+        const index = contacts.length;
+        contacts.push(viewer.entities.add({
+          id: `training-contact-${index}`,
+          position: new CallbackPositionProperty((_time, result) => contactPoint(index,result), false),
+          // glTF noses point along +Z, which Cesium presents as local east at zero heading.
+          orientation: new CallbackProperty(() => {const {k,a} = attitude(index); return Transforms.headingPitchRollQuaternion(contactPoint(index), new HeadingPitchRoll(k.heading - Math.PI/2, -a.pitch, a.roll));}, false),
+          model: {
+            uri: modelUri(), scale: 1, minimumPixelSize: 0, maximumScale: 24,
+            silhouetteColor: Color.fromCssColorString('#ffd25a'), silhouetteSize: 0,
+            nodeTransformations: new PropertyBag({'wing-left': wing(index, 1), 'wing-right': wing(index, -1)}),
+          },
+        }));
+      }
+    };
     let contactConfig = '';
     const update = viewer.scene.preRender.addEventListener(() => {
       const {scenario,time,selected} = current.current;
-      const signature=`${scenario.category}/${scenario.difficulty}/${selected}`;
+      ensureContacts(scenario.count);
+      const signature=`${scenario.category}/${scenario.difficulty}/${selected}/${scenario.count}`;
       for (let index=0;index<contacts.length;index++) {
         const contact=contacts[index];
         contact.show=index<scenario.count && time.current>=scenario.arrival;
         if (contact.model && signature!==contactConfig) {
-          contact.model.uri = new ConstantProperty(`/models/${scenario.category==='Bird'?'bird':'drone'}.glb`);
-          contact.model.minimumPixelSize = new ConstantProperty(scenario.difficulty==='guided'?20:10);
+          contact.model.uri = new ConstantProperty(modelUri());
+          contact.model.minimumPixelSize = new ConstantProperty(scenario.difficulty==='guided'?22:12);
           contact.model.silhouetteSize = new ConstantProperty(selected?1.5:0);
         }
       }

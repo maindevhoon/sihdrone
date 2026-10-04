@@ -1,8 +1,9 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, Check, ChevronRight, Crosshair, Eye, Focus, Layers, Moon, Pause, Play, Radio, RotateCcw, Shuffle, Sun, Timer, Wind, X } from 'lucide-react';
+import { Check, ChevronRight, Eye, Focus, Moon, Pause, Play, Radio, RotateCcw, Shuffle, Sun, X } from 'lucide-react';
 import { categories, createScenario, exercises, formatTime, scoreSession, visibleContacts, type CameraView, type Category, type Difficulty, type ExerciseId, type Session, type SessionEvent } from './simulation';
 import { readSessions, saveSessions } from './storage';
 import Review from './Review';
+import RecognitionGuide from './RecognitionGuide';
 import {createVariationDeck, variationNumber, VARIATION_SEEDS} from './variations';
 const SceneView=lazy(()=>import('./SceneView'));
 type Phase='ready'|'running'|'paused'|'review';
@@ -76,36 +77,66 @@ export default function App() {
   function repeat(session:Session,newVariation=false){setScenarioVersion(newVariation?2:session.scenario.version);setExercise(session.scenario.exercise);setDifficulty(session.scenario.difficulty);setDusk(session.scenario.dusk);setSeed(newVariation?newSeed():session.scenario.seed);setCameraView('overview');reset();}
   function nextChallenge(){if(!result)return;if(!result.observationValid){setExercise('skyline');setDifficulty('guided');setDusk(false);setSeed(newSeed());reset();return;}if(result.classificationScore===0||result.detectionScore<25){repeat(result);return;}setExercise(result.scenario.difficulty==='guided'?result.scenario.exercise:'mixed');setDifficulty(result.scenario.difficulty==='guided'?'challenge':'guided');setDusk(result.scenario.dusk);setSeed(newSeed());reset();}
   function selectSession(id:string){const session=history.find(s=>s.id===id);if(!session)return;setSelectedId(id);setExercise(session.scenario.exercise);setDifficulty(session.scenario.difficulty);setDusk(session.scenario.dusk);setSeed(session.scenario.seed);setScenarioVersion(session.scenario.version);}
+  const [radarSlot,setRadarSlot]=useState<HTMLDivElement|null>(null);
+  const variation=variationNumber(seed);
+  const stateLabel=phase==='running'?'LIVE':phase==='paused'?'HOLD':phase==='review'?'DEBRIEF':'STANDBY';
+  const primary=phase==='ready'?{label:'Start exercise',icon:<Play size={15} fill="currentColor"/>,action:()=>reset(true)}:phase==='running'?{label:'Hold exercise',icon:<Pause size={15}/>,action:pause}:phase==='paused'?{label:'Resume exercise',icon:<Play size={15} fill="currentColor"/>,action:resume}:{label:'Run a new variation',icon:<RotateCcw size={15}/>,action:()=>{if(result)repeat(result,true);}};
   return <div className="app-shell">
-    <header className="topbar"><a className="brand" href="/" aria-label="Aeron home"><span className="brand-mark"><Focus size={22}/></span>AERON<span className="brand-divider"/><span className="brand-sub">TRAINING LAB</span></a>
-      <nav aria-label="Workspace"><button className={!review?'nav-active':''} onClick={()=>{if(review)reset();}}>Exercise</button><button className={review?'nav-active':''} disabled={!result||active} onClick={()=>{if(result)selectSession(result.id);transition('review');}}>Session review {history.length>0&&<span className="nav-dot"/>}</button></nav>
-      <div className="prototype-label">REACT PROTOTYPE <span>02</span></div>
+    <header className="topbar">
+      <a className="brand" href="/" aria-label="Aeron home"><span className="brand-mark"><Focus size={17}/></span><span className="brand-name">AERON</span><span className="brand-sub">Airspace observation trainer</span></a>
+      <nav className="tabs" aria-label="Workspace"><button aria-current={!review?'page':undefined} onClick={()=>{if(review)reset();}}>Exercise</button><button aria-current={review?'page':undefined} disabled={!result||active} onClick={()=>{if(result)selectSession(result.id);transition('review');}}>Debrief{history.length>0&&<span className="nav-count">{history.length}</span>}</button></nav>
+      <div className="topbar-status">
+        <div className="status-block"><span>SCENARIO</span><strong>{definition.short} · {variation?`V${variation.toString().padStart(3,'0')}`:'Saved seed'}</strong></div>
+        <div className="status-block"><span>EXERCISE CLOCK</span><strong className="mono">{formatTime(review&&result?result.duration:elapsed)}<small> / {formatTime(scenario.duration)}</small></strong></div>
+        <span className={`state-pill state-${phase}`}><span className="state-dot"/>{stateLabel}</span>
+      </div>
     </header>
-    <main><div className="page-heading"><div><div className="eyebrow">OBSERVATION & RECOGNITION</div><h1>{review?'Every session is a lesson.':'A clearer view. A better decision.'}</h1><p>{review?'Revisit the scene. Understand your decisions. Build consistency.':'Explore a Delhi-inspired district and practice recognizing aerial objects.'}</p></div><div className="heading-actions">{!review&&<button className="header-start" onClick={()=>phase==='ready'?reset(true):phase==='running'?pause():resume()}>{phase==='running'?<Pause size={15}/>:<Play size={15}/>} {phase==='ready'?'Begin session':phase==='running'?'Pause session':'Resume session'}</button>}<div className="heading-note"><Layers size={17}/><span>{difficulty==='guided'?'Foundations':'Challenge'}<br/><strong>Delhi observation lab</strong></span></div></div></div>
-      <div className="workspace"><aside className="sidebar">
-        <div className="scenario-number"><span>DELHI DISTRICT</span><span className="tag">{difficulty.toUpperCase()}</span></div>
-        <h2>{definition.title}</h2><p className="scenario-desc">{definition.description}</p>
-        <div className="setup-exercise"><label className="section-label" htmlFor="exercise-select">EXERCISE</label><select id="exercise-select" value={exercise} disabled={locked} onChange={e=>{setExercise(e.target.value as ExerciseId);setSeed(newSeed());}}>{exercises.map(e=><option key={e.id} value={e.id}>{e.short}</option>)}</select></div>
-        <div className="scenario-details"><div><Layers size={16}/><span>Environment</span><strong>Delhi district</strong></div><div><Timer size={16}/><span>Session length</span><strong>45 seconds</strong></div><div><Wind size={16}/><span>Conditions</span><strong>{difficulty==='guided'?'Light urban haze':'Dense urban haze'}</strong></div></div>
-        <div className="setup-control"><span className="section-label">DIFFICULTY</span><div className="segmented"><button aria-pressed={difficulty==='guided'} disabled={locked} className={difficulty==='guided'?'selected':''} onClick={()=>setDifficulty('guided')}>Guided</button><button aria-pressed={difficulty==='challenge'} disabled={locked} className={difficulty==='challenge'?'selected':''} onClick={()=>setDifficulty('challenge')}>Challenge</button></div></div>
-        <div className="setup-control"><span className="section-label">LIGHTING</span><div className="segmented"><button aria-pressed={!dusk} disabled={locked} className={!dusk?'selected':''} onClick={()=>setDusk(false)}><Sun size={16}/>Daylight</button><button aria-pressed={dusk} disabled={locked} className={dusk?'selected':''} onClick={()=>setDusk(true)}><Moon size={16}/>Dusk</button></div></div>
-        <div className="variation-row"><span>Variation <strong>{variationNumber(seed)?.toString().padStart(3,'0')??'Saved'} / 200</strong></span><button disabled={locked} onClick={()=>setSeed(newSeed())} aria-label="New scenario variation" title="New scenario variation"><Shuffle size={14}/></button></div>
-        <div className="seed-library"><label htmlFor="variation-select" className="section-label">VARIATION LIBRARY</label><select id="variation-select" aria-label="Choose scenario variation" value={seed} disabled={locked} onChange={e=>{setSeed(Number(e.target.value));setScenarioVersion(2);}}>{variationNumber(seed)===null&&<option value={seed}>Saved seed {seed}</option>}{VARIATION_SEEDS.map((value,index)=><option key={value} value={value}>Variation {(index+1).toString().padStart(3,'0')} · Seed {value}</option>)}</select><span className="seed-value">SEED {seed} · Shuffle avoids repeats</span></div>
-        <div className="briefing"><div className="section-label">YOUR OBJECTIVE</div><div><span>01</span><p>Choose a camera view. Drag to look around.</p></div><div><span>02</span><p>Mark the aerial movement as it appears.</p></div><div><span>03</span><p>Classify the objects, then review or replay.</p></div></div>
-        <div className="sidebar-bottom">{phase==='ready'?<button className="primary-button" onClick={()=>reset(true)}><Play size={17} fill="currentColor"/>Start exercise <span>45s</span></button>:phase==='running'?<button className="primary-button" onClick={pause}><Pause size={17}/>Pause exercise <kbd>Space</kbd></button>:phase==='paused'?<button className="primary-button" onClick={resume}><Play size={17}/>Resume exercise</button>:<button className="primary-button" onClick={()=>result&&repeat(result,true)}><RotateCcw size={17}/>Try a new variation</button>}
-          <p className="demo-note">Synthetic scene · local practice results</p></div>
-      </aside>
-      <section className="main-stage">{review&&result?<Review key={result.id} session={result} history={history} onSelectSession={selectSession} onRepeat={()=>repeat(result)} onNext={nextChallenge}/>:<>
-        <Suspense fallback={<div className="scene scene-loading"><Focus size={28}/><p>Preparing your district…</p></div>}><SceneView scenario={scenario} time={time} displayTime={phase==='ready'?previewTime:elapsed} selected={detected!==null} phase={phase==='ready'?'preview':phase==='paused'?'paused':'running'} cameraView={cameraView} onCameraChange={setCameraView} onSelect={mark} onResume={resume} onNotice={setNotice}/></Suspense>
-        <div className="session-bar"><div><span className="section-label">SESSION PROGRESS</span><strong>{formatTime(elapsed)} <span>/ 00:45</span></strong></div><div className="progress-track"><div style={{width:`${elapsed/scenario.duration*100}%`}}/></div><button className="text-button" disabled={!active} onClick={finish}>Finish & review<ChevronRight size={16}/></button></div>
-        <div className="observation-panel"><div className="observation-heading"><span className="observation-icon"><Crosshair size={20}/></span><div><h3>{detected!==null?'Observation recorded':phase==='running'&&elapsed<scenario.arrival?'Scan the skyline.':'What do you see?'}</h3><p>{detected!==null?`Marked at ${detected.toFixed(1)}s. Choose the category that best describes what you saw.`:phase==='ready'?'The preview shows a sample moment. Start to practice noticing the encounter.':'Watch for aerial movement. Click the object or mark your observation.'}</p></div><button className={`mark-button ${detected!==null?'marked':''}`} disabled={phase!=='running'||detected!==null} onClick={mark}>{detected===null?<><Eye size={16}/>Mark observation <kbd>O</kbd></>:<><Check size={16}/>Observed</>}</button></div>
-          <div className="classification"><span className="section-label">CLASSIFY THE OBSERVATION</span><div className="choice-buttons">{categories.map((choice,i)=><button key={choice} disabled={phase!=='running'||detected===null} aria-pressed={answer===choice} className={answer===choice?'choice-selected':''} onClick={()=>classify(choice)}><span>{i+1}</span>{choice}{answer===choice&&<Check size={15}/>}</button>)}</div></div>
+    <main className={`console ${review?'console-review':''}`}>
+      <aside className="panel mission" aria-label="Mission setup">
+        <div className="panel-head"><span>MISSION SETUP</span><span className="tag">{difficulty==='guided'?'GUIDED':'CHALLENGE'}</span></div>
+        <div className="panel-scroll">
+          <div className="mission-title"><h1>{definition.title}</h1><p>{definition.description}</p></div>
+          <div className="field"><label className="section-label" htmlFor="exercise-select">EXERCISE</label><select id="exercise-select" value={exercise} disabled={locked} onChange={e=>{setExercise(e.target.value as ExerciseId);setSeed(newSeed());}}>{exercises.map(e=><option key={e.id} value={e.id}>{e.short}</option>)}</select></div>
+          <div className="field"><span className="section-label">DIFFICULTY</span><div className="segmented"><button aria-pressed={difficulty==='guided'} disabled={locked} onClick={()=>setDifficulty('guided')}>Guided</button><button aria-pressed={difficulty==='challenge'} disabled={locked} onClick={()=>setDifficulty('challenge')}>Challenge</button></div></div>
+          <div className="field"><span className="section-label">LIGHTING</span><div className="segmented"><button aria-pressed={!dusk} disabled={locked} onClick={()=>setDusk(false)}><Sun size={14}/>Day</button><button aria-pressed={dusk} disabled={locked} onClick={()=>setDusk(true)}><Moon size={14}/>Dusk</button></div></div>
+          <div className="field"><div className="field-row"><label htmlFor="variation-select" className="section-label">VARIATION</label><button className="shuffle-button" disabled={locked} onClick={()=>setSeed(newSeed())} aria-label="New scenario variation" title="New scenario variation"><Shuffle size={13}/>Shuffle</button></div>
+            <select id="variation-select" aria-label="Choose scenario variation" value={seed} disabled={locked} onChange={e=>{setSeed(Number(e.target.value));setScenarioVersion(2);}}>{variation===null&&<option value={seed}>Saved seed {seed}</option>}{VARIATION_SEEDS.map((value,index)=><option key={value} value={value}>Variation {(index+1).toString().padStart(3,'0')} · Seed {value}</option>)}</select>
+            <span className="seed-value">SEED {seed} · {variation?`${variation.toString().padStart(3,'0')} of 200`:'saved variation'} · shuffle avoids repeats</span></div>
+          <dl className="mission-facts"><div><dt>Area</dt><dd>Central New Delhi</dd></div><div><dt>Window</dt><dd>{scenario.duration} s</dd></div><div><dt>Visibility</dt><dd>{difficulty==='guided'?'Light urban haze':'Dense urban haze'}</dd></div><div><dt>Sensors</dt><dd>Radar · EO/IR</dd></div></dl>
+          <div className="briefing"><span className="section-label">PROCEDURE</span><ol>
+            <li><b>Detect</b><span>Scan the skyline and the radar for new returns.</span></li>
+            <li><b>Observe</b><span>Click the aircraft or its radar track, or press <kbd>O</kbd>.</span></li>
+            <li><b>Identify</b><span>Confirm on the EO/IR feed, then classify with <kbd>1</kbd>–<kbd>3</kbd>.</span></li>
+          </ol></div>
         </div>
-        <div className="exercise-footnote"><span><Radio size={12}/>Radar uses simulated scene positions.</span><span><kbd>Space</kbd> pause <kbd>O</kbd> observe <kbd>1–3</kbd> classify</span></div>
+        <div className="panel-foot"><button className="primary-button" onClick={primary.action}>{primary.icon}{primary.label}{phase==='ready'?<span>{scenario.duration}s</span>:phase==='running'?<kbd>Space</kbd>:null}</button><p className="demo-note">Synthetic encounters · results stay in this browser</p></div>
+      </aside>
+      <section className="stage">{review&&result?<Review key={result.id} session={result} history={history} onSelectSession={selectSession} onRepeat={()=>repeat(result)} onNext={nextChallenge}/>:<>
+        <Suspense fallback={<div className="scene scene-loading"><span className="loader"/><p>Preparing the sensor view…</p></div>}><SceneView scenario={scenario} time={time} displayTime={phase==='ready'?previewTime:elapsed} selected={detected!==null} phase={phase==='ready'?'preview':phase==='paused'?'paused':'running'} cameraView={cameraView} onCameraChange={setCameraView} onSelect={mark} onResume={resume} onNotice={setNotice} radarTarget={radarSlot} assessment={answer}/></Suspense>
+        <div className="session-bar">
+          <button className="session-action" onClick={primary.action}>{primary.icon}{primary.label}</button>
+          <div className="session-clock mono">{formatTime(elapsed)}<span> / {formatTime(scenario.duration)}</span></div>
+          <div className="progress-track" aria-hidden><div style={{width:`${elapsed/scenario.duration*100}%`}}/>{detected!==null&&<span className="progress-marker" style={{left:`${detected/scenario.duration*100}%`}}/>}</div>
+          <span className="shortcut-hints"><kbd>Space</kbd>hold <kbd>O</kbd>observe <kbd>1–3</kbd>classify</span>
+          <button className="text-button" disabled={!active} onClick={finish}>End & debrief<ChevronRight size={15}/></button>
+        </div>
       </>}
-      </section></div>
-      {notice&&<div className="notice" role="status">{notice}<button aria-label="Dismiss message" onClick={()=>setNotice('')}><X size={14}/></button></div>}
-      <footer><span><Radio size={14}/>SIH26247 <span className="footer-divider"/>Drone awareness simulation</span><span>Built with React + Three.js <ArrowUpRight size={14}/></span></footer>
+      </section>
+      {!review&&<aside className="panel ops" aria-label="Situation and classification">
+        <div className="panel-head"><span>SITUATION</span><span className="panel-head-note"><Radio size={12}/>Radar · simulated</span></div>
+        <div className="panel-scroll">
+          <div ref={setRadarSlot} className="radar-slot"/>
+          <section className="ops-section observation">
+            <div className="ops-heading"><span className="section-label">OBSERVATION</span><span className={`obs-status ${detected!==null?'done':phase==='running'?'waiting':''}`}>{detected!==null?`MARKED T+${detected.toFixed(1)} s`:phase==='running'?(elapsed<scenario.arrival?'SCANNING':'AWAITING MARK'):'NOT STARTED'}</span></div>
+            <p className="ops-help">{detected!==null?'Confirm the type on the EO/IR feed, then classify the contact.':phase==='ready'?'The scene shows a sample moment. Start the exercise to practise detection.':'Mark as soon as you see aerial movement. Timing counts from arrival.'}</p>
+            <button className={`mark-button ${detected!==null?'marked':''}`} disabled={phase!=='running'||detected!==null} onClick={mark}>{detected===null?<><Eye size={15}/>Mark observation<kbd>O</kbd></>:<><Check size={15}/>Observation recorded</>}</button>
+            <div className="ops-heading classify-heading"><span className="section-label">CLASSIFICATION</span>{answer&&<span className="obs-status done">{answer.toUpperCase()}</span>}</div>
+            <div className="choice-buttons">{categories.map((choice,i)=><button key={choice} disabled={phase!=='running'||detected===null} aria-pressed={answer===choice} onClick={()=>classify(choice)}><kbd>{i+1}</kbd>{choice}{answer===choice&&<Check size={14}/>}</button>)}</div>
+          </section>
+          <RecognitionGuide difficulty={difficulty}/>
+        </div>
+      </aside>}
     </main>
+    {notice&&<div className="notice" role="status">{notice}<button aria-label="Dismiss message" onClick={()=>setNotice('')}><X size={14}/></button></div>}
   </div>;
 }

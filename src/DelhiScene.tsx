@@ -1,10 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { OrbitControls, RoundedBox, Sky } from '@react-three/drei';
+import { Html, OrbitControls, RoundedBox, Sky } from '@react-three/drei';
 import { CanvasTexture, Group, RepeatWrapping, Shape, SRGBColorSpace, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { useThree } from '@react-three/fiber';
-import { contactPosition, type Scenario, type CameraView } from './simulation';
+import type { Scenario, CameraView } from './simulation';
+import ContactModel from './ContactModel';
 
 type SceneProps = { scenario: Scenario; time: MutableRefObject<number>; selected: boolean; onSelect: () => void; cameraView: CameraView; onBearingChange:(bearing:number)=>void; highQuality:boolean };
 function surfaceTexture(kind: 'stone' | 'road' | 'grass' | 'facade', dusk = false) {
@@ -27,41 +28,6 @@ function surfaceTexture(kind: 'stone' | 'road' | 'grass' | 'facade', dusk = fals
   const texture=new CanvasTexture(canvas);texture.wrapS=texture.wrapT=RepeatWrapping;texture.colorSpace=SRGBColorSpace;
   texture.repeat.set(kind==='grass'?25:kind==='road'?12:kind==='stone'?2:1,kind==='grass'?25:kind==='road'?12:kind==='stone'?2:1);
   texture.anisotropy=4;return texture;
-}
-function Drone({ index, scenario, time, selected, onSelect }: Omit<SceneProps, 'cameraView'|'onBearingChange'|'highQuality'> & { index: number }) {
-  const ref=useRef<Group>(null);
-  useFrame(()=> {if(!ref.current)return;const t=time.current;ref.current.visible=t>=scenario.arrival;ref.current.position.set(...contactPosition(scenario,t,index));ref.current.rotation.set(0,.3+Math.sin(t*.12)*.5,Math.sin(t*.4+index)*.045);ref.current.traverse(c=>{if(c.name==='rotor')c.rotation.y=t*45;});});
-  return <group ref={ref} onClick={e=>{e.stopPropagation();onSelect();}} onPointerOver={()=>document.body.style.cursor='crosshair'} onPointerOut={()=>document.body.style.cursor='auto'}>
-    <RoundedBox args={[.72,.27,.9]} radius={.08} castShadow><meshStandardMaterial color="#3b4247" metalness={.65} roughness={.4}/></RoundedBox>
-    <mesh position={[0,-.19,.34]}><sphereGeometry args={[.13,16,12]}/><meshStandardMaterial color="#111b24" metalness={.5}/></mesh>
-    {[-1,1].flatMap(x=>[-1,1].map(z=><group key={`${x}${z}`} position={[x*.66,0,z*.66]}>
-      <mesh rotation={[0,x*z*.78,0]} position={[-x*.25,0,-z*.25]} castShadow><boxGeometry args={[.12,.09,.8]}/><meshStandardMaterial color="#505454"/></mesh>
-      <mesh><cylinderGeometry args={[.12,.13,.2,16]}/><meshStandardMaterial color="#252b30" metalness={.6}/></mesh>
-      <mesh name="rotor" position={[0,.12,0]}><boxGeometry args={[.95,.025,.09]}/><meshStandardMaterial color="#17212a"/></mesh>
-      <mesh position={[0,.125,0]} rotation={[-Math.PI/2,0,0]}><circleGeometry args={[.48,24]}/><meshBasicMaterial color="#9da8aa" transparent opacity={.12} depthWrite={false}/></mesh>
-      <mesh position={[0,-.09,0]}><sphereGeometry args={[.045,8,8]}/><meshBasicMaterial color={x===1?'#ff8f66':'#96ecd3'}/></mesh>
-      <mesh position={[0,-.35,0]}><cylinderGeometry args={[.035,.035,.5,6]}/><meshStandardMaterial color="#303b42"/></mesh>
-    </group>))}
-    {selected&&<mesh rotation={[Math.PI/2,0,0]} position={[0,-.7,0]}><ringGeometry args={[1.3,1.33,48]}/><meshBasicMaterial color="#bceaa3" side={2}/></mesh>}
-  </group>;
-}
-function Bird({index,scenario,time,selected,onSelect}: Omit<SceneProps,'cameraView'|'onBearingChange'|'highQuality'> & {index:number}) {
-  const ref=useRef<Group>(null);
-  const left=useRef<Group>(null),right=useRef<Group>(null);
-  useFrame(()=>{if(!ref.current)return;const t=time.current;ref.current.visible=t>=scenario.arrival;ref.current.position.set(...contactPosition(scenario,t,index));ref.current.rotation.y=.6+Math.sin(t*.12)*.5;
-    if(left.current)left.current.rotation.z=Math.sin(t*8+index)*.45;
-    if(right.current)right.current.rotation.z=-Math.sin(t*8+index)*.45;
-  });
-  return <group ref={ref} onClick={e=>{e.stopPropagation();onSelect();}} onPointerOver={()=>document.body.style.cursor='crosshair'} onPointerOut={()=>document.body.style.cursor='auto'}>
-    <mesh scale={[.2,.2,.65]} castShadow><sphereGeometry args={[.7,12,8]}/><meshStandardMaterial color="#48545c"/></mesh>
-    <mesh position={[0,.07,.47]}><sphereGeometry args={[.16,12,8]}/><meshStandardMaterial color="#3d474d"/></mesh>
-    <mesh position={[0,.05,.68]} rotation={[Math.PI/2,0,0]}><coneGeometry args={[.08,.22,8]}/><meshStandardMaterial color="#c9a05e"/></mesh>
-    {[-1,1].map(side=><group ref={side<0?left:right} key={side} position={[side*.09,0,0]}>
-      <mesh position={[side*.55,0,-.08]} rotation={[0,side*.2,side*.12]} scale={[1,.06,.5]}><sphereGeometry args={[.7,12,8]}/><meshStandardMaterial color="#747e83"/></mesh>
-    </group>)}
-    <mesh position={[0,0,-.6]} rotation={[0,0,Math.PI/2]}><coneGeometry args={[.18,.4,4]}/><meshStandardMaterial color="#606d75"/></mesh>
-    {selected&&<mesh rotation={[Math.PI/2,0,0]} position={[0,-.6,0]}><ringGeometry args={[1.3,1.33,48]}/><meshBasicMaterial color="#bceaa3" side={2}/></mesh>}
-  </group>;
 }
 const initialTarget:[number,number,number]=[0,7,-16];
 const cameraPresets: Record<CameraView,{position:Vector3;target:Vector3}> = {
@@ -157,7 +123,7 @@ export default memo(function DelhiScene({scenario,time,selected,onSelect,cameraV
   return <>
     <color attach="background" args={[dusk?'#8c8b98':'#c8c8be']}/>
     <fog attach="fog" args={[dusk?'#8c8b98':'#d4ceb9',scenario.difficulty==='challenge'?30:65,scenario.difficulty==='challenge'?130:205]}/>
-    <Sky distance={450000} sunPosition={dusk?[-70,3,-80]:[-60,22,-90]} turbidity={dusk?9:6} rayleigh={1.2} mieCoefficient={.008} mieDirectionalG={.8}/>
+    <Sky distance={450000} sunPosition={dusk?[-70,3,-80]:[-60,22,-90]} turbidity={dusk?9:4.5} rayleigh={dusk?1.2:1.9} mieCoefficient={.006} mieDirectionalG={.82}/>
     <hemisphereLight args={['#d4deeb','#8e7e62',dusk?1.2:1.8]}/>
     <directionalLight position={[-35,35,5]} intensity={dusk?2:3.2} color={dusk?'#ffbf83':'#fff0d3'} castShadow shadow-mapSize={highQuality?[2048,2048]:[1024,1024]} shadow-camera-left={-70} shadow-camera-right={70} shadow-camera-top={70} shadow-camera-bottom={-70} shadow-camera-far={160} shadow-normalBias={.08}/>
     <mesh rotation={[-Math.PI/2,0,0]} position={[0,-.03,0]} receiveShadow><planeGeometry args={[400,400]}/><meshStandardMaterial map={textures.grass} bumpMap={textures.grass} bumpScale={.07} roughness={1}/></mesh>
@@ -183,7 +149,10 @@ export default memo(function DelhiScene({scenario,time,selected,onSelect,cameraV
     {Array.from({length:24},(_,i)=><Tree key={i} x={(i%2?1:-1)*(11.5+(i%3)*.7)} z={25-Math.floor(i/2)*9} scale={.65+(i%3)*.1}/>)}
     {Array.from({length:14},(_,i)=><Tree key={`park${i}`} x={(i%2?1:-1)*(37+i%3*7)} z={26-Math.floor(i/2)*11} scale={1.1}/>)}
     {[0,1,2,3,4,5,6,7].map(i=><Car key={i} lane={i%2?3.4:-3.4} start={i*18+5} variant={i===6?'bus':i===7?'rickshaw':'car'} color={['#e4dfd0','#b7c8c8','#b97553','#ede9df','#739288','#d4caaa','#bf5950','#4b9661'][i]} time={time}/>)}
-    {Array.from({length:scenario.count},(_,index)=>scenario.category==='Bird'?<Bird key={index} index={index} scenario={scenario} time={time} selected={selected} onSelect={onSelect}/>:<Drone key={index} index={index} scenario={scenario} time={time} selected={selected} onSelect={onSelect}/>)}
+    {Array.from({length:scenario.count},(_,index)=><ContactModel key={index} index={index} scenario={scenario} time={time} onSelect={onSelect}>
+      {/* After an observation the sensor overlays a track gate, as an EO tracker would. */}
+      {selected&&<Html center zIndexRange={[2,0]} style={{pointerEvents:'none'}}><div className="track-gate"><span>T{(index+1).toString().padStart(2,'0')}</span></div></Html>}
+    </ContactModel>)}
     <CameraRig view={cameraView} onBearingChange={onBearingChange}/>
   </>;
 });

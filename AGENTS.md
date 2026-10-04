@@ -29,31 +29,36 @@ Use the existing npm lockfile. Check whether a development server is already run
 To regenerate the original contact models after editing their geometry:
 
 ```sh
-node scripts/create-contact-models.mjs
+node --import tsx scripts/create-contact-models.mjs
 ```
 
 ## Code map
 
 | File | Responsibility |
 | --- | --- |
-| `src/App.tsx` | Setup, exercise clock, session transitions, observation/classification, keyboard controls |
+| `src/App.tsx` | Console layout, exercise clock, session transitions, observation/classification, keyboard controls |
 | `src/simulation.ts` | Scenario types, seeded generation, contact positions, scoring, recommendations |
+| `src/kinematics.ts` | Velocity, heading, attitude, wingbeat and strobe timing derived from `contactPosition` |
+| `src/contactGeometry.ts` | Real-size drone/kite builders and pose/animation shared by the scene, sensor feed and GLB export |
+| `src/ContactModel.tsx` | R3F wrapper that places a contact model on the shared trajectory |
+| `src/SensorFeed.tsx` | EO/IR sensor camera that tracks a radar-cued contact |
+| `src/RecognitionGuide.tsx` | Recognition-cue reference shown in the situation panel |
 | `src/variations.ts` | Stable 200-seed library and shuffled selection deck |
 | `src/storage.ts` | Validation and persistence of completed sessions |
-| `src/SceneView.tsx` | Environment selection, shared scene controls, overlays, radar integration |
+| `src/SceneView.tsx` | Environment selection, HUD, sensor panel, radar track selection (portalled into the situation panel) |
 | `src/DelhiScene.tsx` | Procedural district, Three.js contacts, local camera presets |
 | `src/EarthScene.tsx` | Cesium viewer, streamed imagery/tiles, geographic contacts, resource cleanup |
 | `src/Radar.tsx` | Interactive synthetic situation display |
 | `src/radarMath.ts` | Radar projection, trails, and readouts |
 | `src/Review.tsx` | Score explanation, timeline, replay, history, JSON export |
 | `src/styles.css` | Shared styling and responsive layouts |
-| `src/*.test.ts` | Node tests for simulation, radar, variations, and persistence |
+| `src/*.test.ts` | Node tests for simulation, kinematics, radar, variations, and persistence |
 | `scripts/` | Cesium asset preparation and contact-model generation |
 
 ## Simulation and persistence rules
 
 - Keep scenario generation, positions, and scoring deterministic for a given scenario version, seed, and simulation time. Randomness belongs in scenario/deck creation, never in frame rendering or replay.
-- Use `contactPosition` and `visibleContacts` as the shared source for both renderers, radar, and replay. Support the full generated contact count in every view; do not assume a fixed maximum from one sample scenario.
+- Use `contactPosition` and `visibleContacts` (and `contactKinematics`, derived from them) as the shared source for both renderers, the sensor feed, radar, and replay. Contact models are real size in metres; Earth view scales positions, not models. Support the full generated contact count in every view; do not assume a fixed maximum from one sample scenario.
 - The scenario format currently supports versions 1 and 2. Preserve the version-1 path when loading or repeating older records. If generation or motion semantics change, version them explicitly and update validation and compatibility tests.
 - The session format is separately versioned at 1, with storage key `aeron-sessions-v1`. Storage validates regenerated scenario fields and recomputed scores. Update these together when changing the schema or scoring, with an explicit migration/compatibility decision.
 - Keep the 200 numbered seed entries stable. Shuffle should cover a complete cycle without repeats and avoid repeating the current seed at a cycle boundary. Display the full seed so a variation can be reproduced.
@@ -66,7 +71,7 @@ node scripts/create-contact-models.mjs
 - Preserve the local training scene and the Earth view. Keep heavy renderer code lazy-loaded, bound resource usage, and dispose of WebGL resources, controls, event handlers, and textures when appropriate. Check lifecycle changes under React StrictMode.
 - The simulation uses `[x, y, z]`, with `y` as altitude. Radar uses an observer at `[0, 0, 12]`. Earth mode maps each training unit to eight metres; the local scene uses one. Keep projection, range rings, trails, and numeric readouts consistent with the selected scale.
 - Radar heading-up mode rotates the projection using camera heading. Preserve range when rotating, count out-of-range contacts accurately, and never clamp them to misleading positions on the scope.
-- Radar contact inspection may record an observation during a live exercise, but preview and replay interactions must not alter exercise results.
+- Radar contact inspection may record an observation during a live exercise, but preview and replay interactions must not alter exercise results. Radar track identity reflects the operator's classification, never the scenario category.
 - Keep the cockpit-inspired display legible and its controls usable at narrow widths. Check that radar, camera presets, attribution, and bottom controls do not overlap.
 - Earth view without credentials shows satellite photography on an ellipsoid. Do not label it as photorealistic 3D buildings or surveyed terrain. Google 3D coverage has not been verified for Delhi with an authenticated account.
 - Keep provider attribution visible and loading/failure states informative. The photorealistic ground-height assumption is illustrative, not a validated collision/terrain system.
