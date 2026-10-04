@@ -10,9 +10,9 @@ export function wheelIntent(event:WheelInput,input:NavigationInput,pageHeight:nu
   const x=clamp(event.deltaX*unit,-160,160),y=clamp(event.deltaY*unit,-160,160);
   if(x===0&&y===0)return null;
   if(event.ctrlKey||event.metaKey)return {kind:'zoom',logScale:y*.009};
+  if(input==='trackpad')return {kind:event.shiftKey?'pan':'orbit',x,y};
   if(event.shiftKey)return {kind:'orbit',x,y};
-  if(input==='mouse')return {kind:'zoom',logScale:y*.0025};
-  return {kind:'pan',x,y};
+  return {kind:'zoom',logScale:y*.0025};
 }
 export function zoomRange(range:number,logScale:number):number {
   return clamp(range*Math.exp(clamp(logScale,-.6,.6)),MIN_EARTH_RANGE,MAX_EARTH_RANGE);

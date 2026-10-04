@@ -11,13 +11,14 @@ import { contactPosition, type CameraView, type Scenario } from './simulation';
 import { attachEarthNavigation, type EarthNavigation } from './earthNavigation';
 import type { NavigationInput } from './earthNavigationMath';
 import { Compass, Home, Minus, Plus, HelpCircle } from 'lucide-react';
+import GestureTutorial from './GestureTutorial';
 import { birdAttitude, contactKinematics, droneAttitude, wingBeat } from './kinematics';
 
 type Props = {
   scenario: Scenario; time: MutableRefObject<number>; selected: boolean;
   cameraView: CameraView; highQuality: boolean; onSelect: () => void;
   onBearingChange: (bearing: number) => void; onStatus: (status: string) => void; onHome:()=>void;
-  input:NavigationInput; onInputChange:(input:NavigationInput)=>void;
+  onTutorialOpen:()=>void; input:NavigationInput; onInputChange:(input:NavigationInput)=>void;
 };
 const env = (import.meta as ImportMeta & {env: Record<string, string | undefined>}).env;
 const googleKey = env.VITE_GOOGLE_MAPS_API_KEY;
@@ -39,7 +40,15 @@ export default function EarthScene(props: Props) {
   const interacted = useRef(false);
   const previousView = useRef(props.cameraView);
   const {input}=props;
-  const [help,setHelp]=useState(false);
+  const [help,setHelp]=useState(() => {
+    try { return sessionStorage.getItem('aeron-gesture-guide-v2') !== 'seen'; }
+    catch { return true; }
+  });
+  const closeHelp = () => {
+    setHelp(false);
+    try { sessionStorage.setItem('aeron-gesture-guide-v2', 'seen'); } catch { /* Guide remains usable without storage. */ }
+  };
+  const openHelp = () => { props.onTutorialOpen(); setHelp(true); };
   current.current = props;
 
   useEffect(() => {
@@ -202,6 +211,7 @@ export default function EarthScene(props: Props) {
       {duration:.8,offset:new HeadingPitchRange(CesiumMath.toRadians(preset.heading),CesiumMath.toRadians(preset.pitch),preset.range)},
     );
   },[props.cameraView]);
+  useEffect(() => { if (help) current.current.onTutorialOpen(); }, [help]);
   useEffect(() => {
     const viewer=viewerRef.current;if(!viewer)return;
     viewer.resolutionScale=props.highQuality?1:.85;
@@ -222,14 +232,10 @@ export default function EarthScene(props: Props) {
         <button aria-label="Face north" title="Face north" onClick={()=>navigation.current?.north()}><Compass size={15}/><span>N</span></button>
         <button aria-label="Top-down satellite view" title="Top-down view" onClick={()=>navigation.current?.topDown()}>2D</button>
         <button aria-label="Return to Delhi" title="Return to Delhi" onClick={()=>home.current()}><Home size={15}/></button>
-        <button aria-label="Satellite gesture help" aria-expanded={help} title="Gesture help" onClick={()=>setHelp(v=>!v)}><HelpCircle size={15}/></button>
+        <button aria-label="Satellite gesture help" aria-haspopup="dialog" aria-expanded={help} title="Gesture tutorial" onClick={openHelp}><HelpCircle size={15}/></button>
       </div>
       <label className="earth-input-mode"><span>INPUT</span><select aria-label="Satellite input device" value={input} onChange={event=>props.onInputChange(event.target.value as NavigationInput)}><option value="trackpad">Trackpad</option><option value="mouse">Mouse</option></select></label>
-      {help&&<div className="earth-gesture-help">
-        <strong>{input==='trackpad'?'Trackpad navigation':'Mouse navigation'}</strong>
-        <p>{input==='trackpad'?'Two-finger scroll pans the map. Pinch to zoom. Hold Shift and scroll sideways to orbit, or up/down to tilt.':'Drag to pan. Scroll to zoom. Right-drag or Shift-drag to orbit and tilt.'}</p>
-        <p>Safari also supports a two-finger twist to rotate. Gestures work while the pointer is over the map.</p>
-      </div>}
     </div>
+    {help && <GestureTutorial input={input} onClose={closeHelp}/>}
   </>;
 }

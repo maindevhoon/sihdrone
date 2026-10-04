@@ -31,7 +31,7 @@ export function attachEarthNavigation(viewer:Viewer,options:{
   controller.inertiaSpin=.55;controller.inertiaTranslate=.55;controller.inertiaZoom=0;
   const savedTabIndex=canvas.getAttribute('tabindex');
   canvas.tabIndex=0;
-  canvas.setAttribute('aria-label','Satellite map. Two-finger scroll to pan, pinch to zoom, Shift and scroll to orbit.');
+  canvas.setAttribute('aria-label','Satellite map. Click-drag to pan, two-finger scroll to rotate and tilt, pinch to zoom. Shift and scroll to pan.');
   let frame=0,disposed=false,safariActive=false,safariEnded=-Infinity;
   let safariPrevious={scale:1,rotation:0};
   const queue:{intent:NavigationIntent;point?:Cartesian2}[]=[];

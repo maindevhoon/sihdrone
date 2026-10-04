@@ -2,8 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {wheelIntent,zoomRange,orbitAngles,safariGestureDelta,MIN_EARTH_RANGE,MAX_EARTH_RANGE,MIN_EARTH_PITCH,MAX_EARTH_PITCH} from './earthNavigationMath';
 const wheel={deltaX:0,deltaY:20,deltaMode:0,ctrlKey:false,metaKey:false,shiftKey:false};
-test('trackpad scrolling pans both axes and mouse wheel zooms',()=>{
-  assert.deepEqual(wheelIntent({...wheel,deltaX:12},'trackpad',600),{kind:'pan',x:12,y:20});
+test('two-finger scrolling orbits both axes while mouse wheel zooms',()=>{
+  assert.deepEqual(wheelIntent({...wheel,deltaX:12},'trackpad',600),{kind:'orbit',x:12,y:20});
   assert.deepEqual(wheelIntent(wheel,'mouse',600),{kind:'zoom',logScale:.05});
 });
 test('pinch is zoom in either device mode and takes priority over Shift',()=>{
@@ -12,12 +12,13 @@ test('pinch is zoom in either device mode and takes priority over Shift',()=>{
     assert.deepEqual(wheelIntent({...wheel,metaKey:true},input,600),{kind:'zoom',logScale:.18});
   }
 });
-test('Shift-scroll orbits instead of panning or zooming',()=>{
-  assert.deepEqual(wheelIntent({...wheel,deltaX:7,shiftKey:true},'trackpad',600),{kind:'orbit',x:7,y:20});
+test('Shift-scroll pans on trackpads and preserves mouse orbit shortcut',()=>{
+  assert.deepEqual(wheelIntent({...wheel,deltaX:7,shiftKey:true},'trackpad',600),{kind:'pan',x:7,y:20});
+  assert.deepEqual(wheelIntent({...wheel,deltaX:7,shiftKey:true},'mouse',600),{kind:'orbit',x:7,y:20});
 });
 test('line/page delta units are normalized and huge momentum is bounded',()=>{
-  assert.deepEqual(wheelIntent({...wheel,deltaY:2,deltaMode:1},'trackpad',600),{kind:'pan',x:0,y:32});
-  assert.deepEqual(wheelIntent({...wheel,deltaY:1,deltaMode:2},'trackpad',600),{kind:'pan',x:0,y:160});
+  assert.deepEqual(wheelIntent({...wheel,deltaY:2,deltaMode:1},'trackpad',600),{kind:'orbit',x:0,y:32});
+  assert.deepEqual(wheelIntent({...wheel,deltaY:1,deltaMode:2},'trackpad',600),{kind:'orbit',x:0,y:160});
   assert.equal(wheelIntent({...wheel,deltaY:NaN},'trackpad',600),null);
   assert.equal(wheelIntent({...wheel,deltaY:0},'trackpad',600),null);
 });
