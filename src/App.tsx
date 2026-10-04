@@ -65,7 +65,7 @@ export default function App() {
   useEffect(()=>{
     if(phase!=='running')return;
     let previous=performance.now(),frame=0,lastRender=0;
-    const tick=(now:number)=>{time.current=Math.min(scenario.duration,time.current+(now-previous)/1000);previous=now;
+    const tick=(now:number)=>{if(phaseRef.current!=='running')return;time.current=Math.min(scenario.duration,time.current+(now-previous)/1000);previous=now;
       if(now-lastRender>80){setElapsed(time.current);lastRender=now;}
       if(time.current>=scenario.duration){setElapsed(scenario.duration);finish();return;}
       frame=requestAnimationFrame(tick);
@@ -131,7 +131,7 @@ export default function App() {
         <div className="panel-foot"><button className="primary-button" onClick={primary.action}>{primary.icon}{primary.label}{phase==='ready'?<span>{scenario.duration}s</span>:phase==='running'?<kbd>Space</kbd>:null}</button><p className="demo-note">Synthetic encounters · results stay in this browser</p></div>
       </aside>
       <section className="stage">{review&&result?<Review key={result.id} session={result} history={history} profile={profile} theatre={theatre} onTheatreChange={changeTheatre} onSelectSession={selectSession} onRepeat={()=>repeat(result)} onNext={nextChallenge}/>:<>
-        <Suspense fallback={<div className="scene scene-loading"><span className="loader"/><p>Preparing the sensor view…</p></div>}><SceneView scenario={scenario} time={time} displayTime={phase==='ready'?previewTime:elapsed} selected={detected!==null} phase={phase==='ready'?'preview':phase==='paused'?'paused':'running'} cameraView={cameraView} onCameraChange={setCameraView} onSelect={mark} onResume={resume} onNotice={setNotice} radarTarget={radarSlot} assessment={answer} theatre={theatre} onTheatreChange={changeTheatre}/></Suspense>
+        <Suspense fallback={<div className="scene scene-loading"><span className="loader"/><p>Preparing the sensor view…</p></div>}><SceneView scenario={scenario} time={time} displayTime={phase==='ready'?previewTime:elapsed} selected={detected!==null} phase={phase==='ready'?'preview':phase==='paused'?'paused':'running'} cameraView={cameraView} onCameraChange={setCameraView} onSelect={mark} onResume={resume} onPause={pause} onNotice={setNotice} radarTarget={radarSlot} assessment={answer} theatre={theatre} onTheatreChange={changeTheatre}/></Suspense>
         <div className="session-bar">
           <button className="session-action" onClick={primary.action}>{primary.icon}{primary.label}</button>
           <div className="session-clock mono">{formatTime(elapsed)}<span> / {formatTime(scenario.duration)}</span></div>

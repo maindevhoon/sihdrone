@@ -10,18 +10,20 @@ const noop=()=>{};
 function Replay({session,theatre,onTheatreChange}: {session:Session;theatre:Theatre;onTheatreChange:(id:TheatreId)=>void}) {
   const [elapsed,setElapsed]=useState(0);
   const [playing,setPlaying]=useState(false);
+  const playingRef=useRef(false);
+  function changePlaying(value:boolean){playingRef.current=value;setPlaying(value);}
   const [camera,setCamera]=useState<CameraView>('overview');
   const time=useRef(0);
   useEffect(()=>{if(!playing)return;let previous=performance.now(),frame=0,lastRender=0;
-    const tick=(now:number)=>{time.current=Math.min(session.duration,time.current+(now-previous)/1000);previous=now;if(now-lastRender>80){setElapsed(time.current);lastRender=now;}
-      if(time.current>=session.duration){setElapsed(session.duration);setPlaying(false);return;}frame=requestAnimationFrame(tick);};frame=requestAnimationFrame(tick);const hide=()=>{if(document.hidden)setPlaying(false);};document.addEventListener('visibilitychange',hide);return()=>{cancelAnimationFrame(frame);document.removeEventListener('visibilitychange',hide);};
+    const tick=(now:number)=>{if(!playingRef.current)return;time.current=Math.min(session.duration,time.current+(now-previous)/1000);previous=now;if(now-lastRender>80){setElapsed(time.current);lastRender=now;}
+      if(time.current>=session.duration){setElapsed(session.duration);changePlaying(false);return;}frame=requestAnimationFrame(tick);};frame=requestAnimationFrame(tick);const hide=()=>{if(document.hidden)changePlaying(false);};document.addEventListener('visibilitychange',hide);return()=>{cancelAnimationFrame(frame);document.removeEventListener('visibilitychange',hide);};
   },[playing,session.duration]);
   function seek(value:number){time.current=value;setElapsed(value);}
-  function toggle(){if(!playing&&time.current>=session.duration)seek(0);setPlaying(!playing);}
+  function toggle(){if(!playing&&time.current>=session.duration)seek(0);changePlaying(!playing);}
   // The radar shows the operator's assessment only from the moment it was recorded.
   const classifiedAt=session.events.filter(e=>e.type==='classification').at(-1)?.time;
   const assessment=classifiedAt!==undefined&&elapsed>=classifiedAt?session.answer:'';
-  return <div className="replay-container"><Suspense fallback={<div className="scene scene-loading">Preparing replay…</div>}><SceneView scenario={session.scenario} time={time} displayTime={elapsed} selected={session.detection!==null&&elapsed>=session.detection} phase="replay" cameraView={camera} onCameraChange={setCamera} onSelect={noop} assessment={assessment} theatre={theatre} onTheatreChange={onTheatreChange}/></Suspense>
+  return <div className="replay-container"><Suspense fallback={<div className="scene scene-loading">Preparing replay…</div>}><SceneView scenario={session.scenario} time={time} displayTime={elapsed} selected={session.detection!==null&&elapsed>=session.detection} phase="replay" cameraView={camera} onCameraChange={setCamera} onSelect={noop} onPause={()=>changePlaying(false)} assessment={assessment} theatre={theatre} onTheatreChange={onTheatreChange}/></Suspense>
     <div className="replay-controls"><button onClick={toggle} aria-label={playing?'Pause replay':'Play replay'}>{playing?<Pause size={16}/>:<Play size={16}/>}</button><span>{formatTime(elapsed)}</span><div className="replay-track"><input type="range" aria-label="Replay position" min={0} max={session.duration} step={.05} value={elapsed} onChange={e=>seek(Number(e.target.value))}/>{session.events.filter(e=>e.type==='observation'||e.type==='classification').map((event,i)=><span className={`replay-marker marker-${event.type}`} key={i} style={{left:`${session.duration?event.time/session.duration*100:0}%`}} title={`${event.label} at ${event.time.toFixed(1)}s`}/>)}</div><span>{formatTime(session.duration)}</span></div>
     <p className="replay-caption">Same variation, same movement. Amber marks your observation; green marks a classification. Replay does not change the result.</p>
   </div>;

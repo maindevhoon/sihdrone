@@ -55,6 +55,7 @@ The automated checks cover seeded reproduction, contact arrival, scoring edge ca
 - `src/App.tsx`: console layout, the live simulation clock, controls, and session lifecycle.
 - `src/DelhiScene.tsx`: district geometry, vehicles, and camera motion; `src/ContactModel.tsx` places contacts in it.
 - `src/SceneView.tsx`: renderer selection, HUD, heading tape, sensor panel, graphics options, and fullscreen.
+- `src/earthNavigation.ts`: satellite gestures, camera bounds, and input cleanup; `src/earthNavigationMath.ts` contains testable input/zoom/orbit math.
 - `src/SensorFeed.tsx`: the EO/IR camera.
 - `src/Radar.tsx`: shared-position radar visualization.
 - `src/RecognitionGuide.tsx`: recognition cues.
@@ -85,6 +86,8 @@ The **Theatre** selector (mission setup or sensor HUD) chooses where the exercis
 | Tawang | 27.5883° N, 91.8653° E, Arunachal Pradesh | Mountain town and valley |
 | Longewala | 27.5249° N, 70.1567° E, Thar Desert | Open desert |
 | Attari | 31.6046° N, 74.5731° E, Attari–Wagah crossing | Border plains |
+
+On a Mac, geographic theatres default to **Trackpad** input: **one-finger click-drag pans**, **two-finger scroll rotates horizontally or tilts vertically**, and **pinch zooms** around the pointer. Holding **Shift + two-finger scroll** is an alternate way to pan. Moving a finger without holding the click only moves the pointer. Safari also supports pinch and two-finger twist gestures. **Mouse** input restores wheel zoom; dragging pans, and right-drag or Shift-drag orbits. Use the map buttons for zoom, north, top-down, return to the selected site, and gesture help. An illustrated gesture tutorial opens the first time you enter a geographic theatre in a tab; reopen it with the **?** button. Opening the guide pauses a live exercise or replay; resume when you are ready. The local district keeps its existing controls.
 
 Geographic theatres use CesiumJS. Without credentials they stream Esri World Imagery draped on **Esri World Elevation 3D terrain**, so mountains, valleys and ridgelines render in relief with sun shading. With `VITE_GOOGLE_MAPS_API_KEY` (Map Tiles API enabled) or `VITE_CESIUM_ION_TOKEN`, they use **Google Photorealistic 3D Tiles**, the Google Earth-style mesh; coverage and detail depend on Google. Copy `.env.example` to `.env.local` (and add the same variable in Vercel) to enable it. Browser credentials are visible to users: restrict them by HTTP referrer and API.
 

@@ -22,13 +22,14 @@ export const THEATRES: Theatre[] = [
 export const theatreById = (id: string) => THEATRES.find(t => t.id === id) ?? THEATRES[0];
 export const isGeographic = (t: Theatre) => t.kind !== 'synthetic';
 
-/** Camera framing per terrain: wider, higher views over mountains so slopes never fill the frame. */
+/** Camera framing per terrain: wider, higher views over mountains so slopes never fill the frame.
+ *  Pitches stay at or below -12°, the satellite navigation's tilt limit. */
 export type Framing = { heading: number; pitch: number; range: number };
 export const cameraFraming: Record<Exclude<TheatreKind, 'synthetic'>, Record<'overview' | 'rooftop' | 'street', Framing>> = {
-  urban: { overview: { heading: 30, pitch: -42, range: 1500 }, rooftop: { heading: 25, pitch: -18, range: 360 }, street: { heading: 0, pitch: -3, range: 200 } },
-  mountain: { overview: { heading: 30, pitch: -30, range: 2600 }, rooftop: { heading: 35, pitch: -14, range: 1100 }, street: { heading: 10, pitch: -6, range: 650 } },
-  desert: { overview: { heading: 30, pitch: -36, range: 1800 }, rooftop: { heading: 25, pitch: -15, range: 700 }, street: { heading: 0, pitch: -4, range: 350 } },
-  plains: { overview: { heading: 30, pitch: -38, range: 1700 }, rooftop: { heading: 25, pitch: -16, range: 600 }, street: { heading: 0, pitch: -4, range: 300 } },
+  urban: { overview: { heading: 0, pitch: -60, range: 1250 }, rooftop: { heading: 25, pitch: -18, range: 360 }, street: { heading: 0, pitch: -12, range: 200 } },
+  mountain: { overview: { heading: 30, pitch: -30, range: 2600 }, rooftop: { heading: 35, pitch: -14, range: 1100 }, street: { heading: 10, pitch: -12, range: 650 } },
+  desert: { overview: { heading: 30, pitch: -36, range: 1800 }, rooftop: { heading: 25, pitch: -15, range: 700 }, street: { heading: 0, pitch: -12, range: 350 } },
+  plains: { overview: { heading: 30, pitch: -38, range: 1700 }, rooftop: { heading: 25, pitch: -16, range: 600 }, street: { heading: 0, pitch: -12, range: 300 } },
 };
 export const cameraLabels: Record<TheatreKind, Record<'overview' | 'rooftop' | 'street', string>> = {
   synthetic: { overview: 'Overview', rooftop: 'Rooftop', street: 'Street' },

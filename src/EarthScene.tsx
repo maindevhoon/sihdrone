@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MutableRefObject } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
   ArcGisMapServerImageryProvider, ArcGISTiledElevationTerrainProvider, CallbackPositionProperty, CallbackProperty,
   BoundingSphere, Cartesian2, Cartesian3, Cartographic, Color, ConstantProperty, HeadingPitchRange, HeadingPitchRoll, ImageryLayer,
@@ -8,6 +8,10 @@ import {
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { contactPosition, type CameraView, type Scenario } from './simulation';
+import { attachEarthNavigation, type EarthNavigation } from './earthNavigation';
+import type { NavigationInput } from './earthNavigationMath';
+import { Compass, Home, Minus, Plus, HelpCircle } from 'lucide-react';
+import GestureTutorial from './GestureTutorial';
 import { birdAttitude, contactKinematics, droneAttitude, wingBeat } from './kinematics';
 import { airframeFor } from './airframes';
 import { cameraFraming, groundSamplePoints, type Theatre } from './theatres';
@@ -16,6 +20,7 @@ type Props = {
   scenario: Scenario; time: MutableRefObject<number>; selected: boolean; theatre: Theatre; labels: boolean;
   cameraView: CameraView; highQuality: boolean; onSelect: () => void;
   onBearingChange: (bearing: number) => void; onStatus: (status: string) => void; onGround?: (height: number) => void;
+  onHome:()=>void; onTutorialOpen:()=>void; input:NavigationInput; onInputChange:(input:NavigationInput)=>void;
 };
 const env = (import.meta as ImportMeta & {env: Record<string, string | undefined>}).env;
 const googleKey = env.VITE_GOOGLE_MAPS_API_KEY;
@@ -65,6 +70,20 @@ export default function EarthScene(props: Props) {
   const current = useRef(props);
   const groundHeight = useRef(props.theatre.elevation ?? 0);
   const ready = useRef<Promise<boolean>>(Promise.resolve(false));
+  const navigation = useRef<EarthNavigation|null>(null);
+  const home = useRef<()=>void>(()=>{});
+  const interacted = useRef(false);
+  const previousView = useRef(props.cameraView);
+  const {input}=props;
+  const [help,setHelp]=useState(() => {
+    try { return sessionStorage.getItem('aeron-gesture-guide-v2') !== 'seen'; }
+    catch { return true; }
+  });
+  const closeHelp = () => {
+    setHelp(false);
+    try { sessionStorage.setItem('aeron-gesture-guide-v2', 'seen'); } catch { /* Guide remains usable without storage. */ }
+  };
+  const openHelp = () => { props.onTutorialOpen(); setHelp(true); };
   current.current = props;
 
   useEffect(() => {
@@ -83,8 +102,7 @@ export default function EarthScene(props: Props) {
     viewer.scene.globe.baseColor = Color.fromCssColorString('#213343');
     viewer.scene.backgroundColor = Color.fromCssColorString('#0c1725');
     viewer.scene.fog.density = .00008;
-    viewer.scene.screenSpaceCameraController.minimumZoomDistance = 25;
-    viewer.scene.screenSpaceCameraController.maximumZoomDistance = 18000000;
+
     viewer.cesiumWidget.creditContainer.classList.add('earth-credits');
     viewer.scene.postProcessStages.fxaa.enabled = true;
     // Sun-lit relief shading makes ridgelines and valleys read like a real aerial view.
@@ -155,9 +173,19 @@ export default function EarthScene(props: Props) {
       }
       contactConfig=signature;
     });
-    const changed = viewer.camera.changed.addEventListener(() => {
+    const updateCamera = () => {
       current.current.onBearingChange(Math.round(CesiumMath.toDegrees(viewer.camera.heading))%360);
-    });
+      const element=container.current;
+      if(element){
+        const point=viewer.camera.positionCartographic;
+        element.dataset.cameraLongitude=CesiumMath.toDegrees(point.longitude).toFixed(7);
+        element.dataset.cameraLatitude=CesiumMath.toDegrees(point.latitude).toFixed(7);
+        element.dataset.cameraHeight=point.height.toFixed(2);
+        element.dataset.cameraHeading=CesiumMath.toDegrees(viewer.camera.heading).toFixed(2);
+        element.dataset.cameraPitch=CesiumMath.toDegrees(viewer.camera.pitch).toFixed(2);
+      }
+    };
+    const changed = viewer.camera.changed.addEventListener(updateCamera);
     viewer.camera.percentageChanged = .01;
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
     handler.setInputAction((event: {position: Cartesian2}) => {
@@ -165,7 +193,18 @@ export default function EarthScene(props: Props) {
       if(pick?.id instanceof Object && typeof pick.id.id==='string' && pick.id.id.startsWith('training-contact-')) current.current.onSelect();
     }, ScreenSpaceEventType.LEFT_CLICK);
 
-    frameCamera(viewer, current.current.theatre, current.current.cameraView, groundHeight.current, 0);
+    frameCamera(viewer, current.current.theatre, current.current.cameraView, groundHeight.current, 0);updateCamera();
+    // Home returns to the selected theatre's site, not a fixed city.
+    home.current=()=>{
+      navigation.current?.cancel();viewer.camera.cancelFlight();interacted.current=true;
+      previousView.current='overview';
+      frameCamera(viewer, current.current.theatre, 'overview', groundHeight.current, 0);updateCamera();current.current.onHome();
+    };
+    navigation.current=attachEarthNavigation(viewer,{
+      input:()=>current.current.input,groundHeight:()=>groundHeight.current,
+      fallbackTarget:anchor,
+      onInteraction:()=>{interacted.current=true;},onChange:updateCamera,
+    });
     /** Resolves true when Google photorealistic tiles are the rendered surface, false for imagery on terrain. */
     async function loadWorld() {
       current.current.onStatus(hasPhotorealisticAccess?'Loading photorealistic 3D tiles…':'Loading satellite imagery and 3D terrain…');
@@ -202,7 +241,7 @@ export default function EarthScene(props: Props) {
     }
     ready.current = loadWorld();
     return () => {
-      disposed=true;update();changed();handler.destroy();
+      disposed=true;navigation.current?.dispose();navigation.current=null;update();changed();handler.destroy();
       viewerRef.current=null;
       if(!viewer.isDestroyed())viewer.destroy();
     };
@@ -213,6 +252,8 @@ export default function EarthScene(props: Props) {
     const viewer=viewerRef.current;if(!viewer)return;
     let cancelled=false;
     const theatre=props.theatre;
+    navigation.current?.cancel();viewer.camera.cancelFlight();
+    interacted.current=false;
     groundHeight.current=theatre.elevation ?? 0;
     frameCamera(viewer, theatre, current.current.cameraView, groundHeight.current, 0);
     void ready.current.then(async tiles => {
@@ -220,14 +261,21 @@ export default function EarthScene(props: Props) {
       if(cancelled||viewer.isDestroyed())return;
       groundHeight.current=ground;
       current.current.onGround?.(ground);
-      frameCamera(viewer, theatre, current.current.cameraView, ground, 1);
+      // Re-frame on the sampled ground unless the trainee has already started navigating.
+      if(!interacted.current)frameCamera(viewer, theatre, current.current.cameraView, ground, 1);
     });
     return () => { cancelled=true; };
   },[props.theatre]);
   useEffect(() => {
     const viewer=viewerRef.current;
-    if(viewer)frameCamera(viewer, current.current.theatre, props.cameraView, groundHeight.current, 1.2);
+    if(!viewer)return;
+    if(previousView.current===props.cameraView)return;
+    previousView.current=props.cameraView;
+    navigation.current?.cancel();
+    interacted.current=true;
+    frameCamera(viewer, current.current.theatre, props.cameraView, groundHeight.current, .8);
   },[props.cameraView]);
+  useEffect(() => { if (help) current.current.onTutorialOpen(); }, [help]);
   useEffect(() => {
     const viewer=viewerRef.current;if(!viewer)return;
     viewer.resolutionScale=props.highQuality?1:.85;
@@ -238,5 +286,19 @@ export default function EarthScene(props: Props) {
     viewer.clock.currentTime=JulianDate.fromIso8601(props.scenario.dusk?'2026-10-04T12:15:00Z':'2026-10-04T06:00:00Z');
     viewer.scene.fog.density=props.scenario.difficulty==='challenge'?.0002:.00008;
   },[props.scenario.dusk,props.scenario.difficulty]);
-  return <div ref={container} className="earth-canvas" aria-label={`Interactive 3D Earth view of ${props.theatre.name}, ${props.theatre.region}`}/>;
+  return <>
+    <div ref={container} className="earth-canvas" aria-label={`Interactive 3D Earth view of ${props.theatre.name}, ${props.theatre.region}`}/>
+    <div className="earth-navigation" role="group" aria-label="Satellite navigation controls">
+      <div className="earth-nav-buttons">
+        <button aria-label="Zoom in satellite view" title="Zoom in" onClick={()=>navigation.current?.zoom(-.22)}><Plus size={15}/></button>
+        <button aria-label="Zoom out satellite view" title="Zoom out" onClick={()=>navigation.current?.zoom(.22)}><Minus size={15}/></button>
+        <button aria-label="Face north" title="Face north" onClick={()=>navigation.current?.north()}><Compass size={15}/><span>N</span></button>
+        <button aria-label="Top-down satellite view" title="Top-down view" onClick={()=>navigation.current?.topDown()}>2D</button>
+        <button aria-label={`Return to ${props.theatre.name}`} title={`Return to ${props.theatre.name}`} onClick={()=>home.current()}><Home size={15}/></button>
+        <button aria-label="Satellite gesture help" aria-haspopup="dialog" aria-expanded={help} title="Gesture tutorial" onClick={openHelp}><HelpCircle size={15}/></button>
+      </div>
+      <label className="earth-input-mode"><span>INPUT</span><select aria-label="Satellite input device" value={input} onChange={event=>props.onInputChange(event.target.value as NavigationInput)}><option value="trackpad">Trackpad</option><option value="mouse">Mouse</option></select></label>
+    </div>
+    {help && <GestureTutorial input={input} onClose={closeHelp}/>}
+  </>;
 }
