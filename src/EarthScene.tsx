@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MutableRefObject } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
   ArcGisMapServerImageryProvider, CallbackPositionProperty, CallbackProperty,
   BoundingSphere, Cartesian2, Cartesian3, Color, ConstantProperty, HeadingPitchRange, HeadingPitchRoll, ImageryLayer,
@@ -8,12 +8,16 @@ import {
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { contactPosition, type CameraView, type Scenario } from './simulation';
+import { attachEarthNavigation, type EarthNavigation } from './earthNavigation';
+import type { NavigationInput } from './earthNavigationMath';
+import { Compass, Home, Minus, Plus, HelpCircle } from 'lucide-react';
 import { birdAttitude, contactKinematics, droneAttitude, wingBeat } from './kinematics';
 
 type Props = {
   scenario: Scenario; time: MutableRefObject<number>; selected: boolean;
   cameraView: CameraView; highQuality: boolean; onSelect: () => void;
-  onBearingChange: (bearing: number) => void; onStatus: (status: string) => void;
+  onBearingChange: (bearing: number) => void; onStatus: (status: string) => void; onHome:()=>void;
+  input:NavigationInput; onInputChange:(input:NavigationInput)=>void;
 };
 const env = (import.meta as ImportMeta & {env: Record<string, string | undefined>}).env;
 const googleKey = env.VITE_GOOGLE_MAPS_API_KEY;
@@ -21,15 +25,21 @@ const ionToken = env.VITE_CESIUM_ION_TOKEN;
 const hasPhotorealisticAccess = Boolean(googleKey || ionToken);
 const longitude = 77.2268, latitude = 28.6126;
 const presets = {
-  overview: { heading: 30, pitch: -42, range: 1500 },
+  overview: { heading: 0, pitch: -60, range: 1250 },
   rooftop: { heading: 25, pitch: -18, range: 360 },
-  street: { heading: 0, pitch: -3, range: 200 },
+  street: { heading: 0, pitch: -12, range: 200 },
 };
 export default function EarthScene(props: Props) {
   const container = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Viewer | null>(null);
   const current = useRef(props);
   const groundHeight = useRef(0);
+  const navigation = useRef<EarthNavigation|null>(null);
+  const home = useRef<()=>void>(()=>{});
+  const interacted = useRef(false);
+  const previousView = useRef(props.cameraView);
+  const {input}=props;
+  const [help,setHelp]=useState(false);
   current.current = props;
 
   useEffect(() => {
@@ -48,8 +58,7 @@ export default function EarthScene(props: Props) {
     viewer.scene.globe.baseColor = Color.fromCssColorString('#213343');
     viewer.scene.backgroundColor = Color.fromCssColorString('#0c1725');
     viewer.scene.fog.density = .00008;
-    viewer.scene.screenSpaceCameraController.minimumZoomDistance = 25;
-    viewer.scene.screenSpaceCameraController.maximumZoomDistance = 18000000;
+
     viewer.cesiumWidget.creditContainer.classList.add('earth-credits');
     viewer.scene.postProcessStages.fxaa.enabled = true;
     viewer.clock.currentTime = JulianDate.fromIso8601('2026-10-04T06:00:00Z');
@@ -105,9 +114,19 @@ export default function EarthScene(props: Props) {
       }
       contactConfig=signature;
     });
-    const changed = viewer.camera.changed.addEventListener(() => {
+    const updateCamera = () => {
       current.current.onBearingChange(Math.round(CesiumMath.toDegrees(viewer.camera.heading))%360);
-    });
+      const element=container.current;
+      if(element){
+        const point=viewer.camera.positionCartographic;
+        element.dataset.cameraLongitude=CesiumMath.toDegrees(point.longitude).toFixed(7);
+        element.dataset.cameraLatitude=CesiumMath.toDegrees(point.latitude).toFixed(7);
+        element.dataset.cameraHeight=point.height.toFixed(2);
+        element.dataset.cameraHeading=CesiumMath.toDegrees(viewer.camera.heading).toFixed(2);
+        element.dataset.cameraPitch=CesiumMath.toDegrees(viewer.camera.pitch).toFixed(2);
+      }
+    };
+    const changed = viewer.camera.changed.addEventListener(updateCamera);
     viewer.camera.percentageChanged = .01;
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
     handler.setInputAction((event: {position: Cartesian2}) => {
@@ -120,7 +139,19 @@ export default function EarthScene(props: Props) {
       viewer.camera.lookAt(Cartesian3.fromDegrees(longitude,latitude,groundHeight.current+70),new HeadingPitchRange(CesiumMath.toRadians(preset.heading),CesiumMath.toRadians(preset.pitch),preset.range));
       viewer.camera.lookAtTransform(Matrix4.IDENTITY);
     }
-    moveCamera();
+    moveCamera();updateCamera();
+    home.current=()=>{
+      navigation.current?.cancel();viewer.camera.cancelFlight();interacted.current=true;
+      previousView.current='overview';
+      const preset=presets.overview;
+      viewer.camera.lookAt(Cartesian3.fromDegrees(longitude,latitude,groundHeight.current),new HeadingPitchRange(0,CesiumMath.toRadians(preset.pitch),preset.range));
+      viewer.camera.lookAtTransform(Matrix4.IDENTITY);updateCamera();current.current.onHome();
+    };
+    navigation.current=attachEarthNavigation(viewer,{
+      input:()=>current.current.input,groundHeight:()=>groundHeight.current,
+      fallbackTarget:()=>Cartesian3.fromDegrees(longitude,latitude,groundHeight.current),
+      onInteraction:()=>{interacted.current=true;},onChange:updateCamera,
+    });
     async function loadWorld() {
       current.current.onStatus(hasPhotorealisticAccess?'Loading photorealistic 3D tiles…':'Loading Delhi satellite imagery…');
       try {
@@ -130,7 +161,7 @@ export default function EarthScene(props: Props) {
           viewer.scene.primitives.add(tiles);
           viewer.scene.globe.show = false;
           groundHeight.current = 215;
-          moveCamera();
+          if(!interacted.current){moveCamera();updateCamera();}
           current.current.onStatus('GOOGLE PHOTOREALISTIC 3D / NEW DELHI');
           tiles.tileFailed.addEventListener(() => {if(!disposed)current.current.onStatus('Some 3D tiles could not load — check coverage and API access.');});
           return;
@@ -151,7 +182,7 @@ export default function EarthScene(props: Props) {
     }
     void loadWorld();
     return () => {
-      disposed=true;update();changed();handler.destroy();
+      disposed=true;navigation.current?.dispose();navigation.current=null;update();changed();handler.destroy();
       viewerRef.current=null;
       if(!viewer.isDestroyed())viewer.destroy();
     };
@@ -160,11 +191,15 @@ export default function EarthScene(props: Props) {
   useEffect(() => {
     const viewer=viewerRef.current;
     if(!viewer)return;
+    if(previousView.current===props.cameraView)return;
+    previousView.current=props.cameraView;
+    navigation.current?.cancel();
+    interacted.current=true;
     const preset=presets[props.cameraView];
     viewer.camera.flyToBoundingSphere(
       // The same anchor keeps every camera preset looking at the exercise airspace.
       new BoundingSphere(Cartesian3.fromDegrees(longitude,latitude,groundHeight.current+70),10),
-      {duration:1.2,offset:new HeadingPitchRange(CesiumMath.toRadians(preset.heading),CesiumMath.toRadians(preset.pitch),preset.range)},
+      {duration:.8,offset:new HeadingPitchRange(CesiumMath.toRadians(preset.heading),CesiumMath.toRadians(preset.pitch),preset.range)},
     );
   },[props.cameraView]);
   useEffect(() => {
@@ -178,5 +213,23 @@ export default function EarthScene(props: Props) {
     viewer.scene.globe.enableLighting=props.scenario.dusk;
     viewer.scene.fog.density=props.scenario.difficulty==='challenge'?.0002:.00008;
   },[props.scenario.dusk,props.scenario.difficulty]);
-  return <div ref={container} className="earth-canvas" aria-label="Interactive satellite Earth view of New Delhi"/>;
+  return <>
+    <div ref={container} className="earth-canvas" aria-label="Interactive satellite Earth view of New Delhi"/>
+    <div className="earth-navigation" role="group" aria-label="Satellite navigation controls">
+      <div className="earth-nav-buttons">
+        <button aria-label="Zoom in satellite view" title="Zoom in" onClick={()=>navigation.current?.zoom(-.22)}><Plus size={15}/></button>
+        <button aria-label="Zoom out satellite view" title="Zoom out" onClick={()=>navigation.current?.zoom(.22)}><Minus size={15}/></button>
+        <button aria-label="Face north" title="Face north" onClick={()=>navigation.current?.north()}><Compass size={15}/><span>N</span></button>
+        <button aria-label="Top-down satellite view" title="Top-down view" onClick={()=>navigation.current?.topDown()}>2D</button>
+        <button aria-label="Return to Delhi" title="Return to Delhi" onClick={()=>home.current()}><Home size={15}/></button>
+        <button aria-label="Satellite gesture help" aria-expanded={help} title="Gesture help" onClick={()=>setHelp(v=>!v)}><HelpCircle size={15}/></button>
+      </div>
+      <label className="earth-input-mode"><span>INPUT</span><select aria-label="Satellite input device" value={input} onChange={event=>props.onInputChange(event.target.value as NavigationInput)}><option value="trackpad">Trackpad</option><option value="mouse">Mouse</option></select></label>
+      {help&&<div className="earth-gesture-help">
+        <strong>{input==='trackpad'?'Trackpad navigation':'Mouse navigation'}</strong>
+        <p>{input==='trackpad'?'Two-finger scroll pans the map. Pinch to zoom. Hold Shift and scroll sideways to orbit, or up/down to tilt.':'Drag to pan. Scroll to zoom. Right-drag or Shift-drag to orbit and tilt.'}</p>
+        <p>Safari also supports a two-finger twist to rotate. Gestures work while the pointer is over the map.</p>
+      </div>}
+    </div>
+  </>;
 }
