@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Devanagari:wght@400;500;600;700&display=swap');
 
 /* Operations-console theme. Colour roles: amber = operator action, green = sensor/scope,
    yellow = unknown track, red = suspect UAS, cyan = information. */
@@ -9,7 +9,7 @@
   --ok:#3fd68f;--ok-soft:#3fd68f1c;--warn:#ffd25a;--danger:#ff5f57;--info:#5cc8ff;--scope:#5ef0b0;
   --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
   --radius:8px;
-  font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif;font-size:14px;color:var(--text);background:var(--bg);
+  font-family:'IBM Plex Sans','IBM Plex Sans Devanagari',system-ui,-apple-system,sans-serif;font-size:14px;color:var(--text);background:var(--bg);
   color-scheme:dark;font-synthesis:none;-webkit-font-smoothing:antialiased;
 }
 *{box-sizing:border-box}
@@ -649,3 +649,12 @@ kbd{font-family:var(--mono);font-size:10px;line-height:1;color:var(--text-2);bac
 .world-earth .view-modes{top:178px}
 .replay-scene.world-earth .view-modes{top:56px}
 @media(max-width:640px){.world-earth .view-modes{top:164px}.replay-scene.world-earth .view-modes{top:194px}}
+
+/* Language toggle */
+.lang-toggle{display:flex;gap:1px;padding:2px;border:1px solid var(--line-2);border-radius:6px;background:var(--raise);font-family:var(--mono);font-size:11px}
+.lang-toggle span{padding:4px 7px;border-radius:4px;color:var(--muted)}
+.lang-toggle span.on{background:#e9eff4;color:#0b1118;font-weight:600}
+.lang-toggle:hover span:not(.on){color:var(--text)}
+/* Devanagari has no monospace face here, and letter-spacing breaks conjuncts: label styles switch in Hindi. */
+:lang(hi) :is(.section-label,.panel-head,.eyebrow,.status-block span,.state-pill,.tag,.obs-status,.seed-value,.kpi span,.review-context span,.guide-title span,.mission-facts dt,.airframe-ref dt){font-family:'IBM Plex Sans Devanagari','IBM Plex Sans',sans-serif;letter-spacing:0;text-transform:none}
+:lang(hi) :is(.section-label,.eyebrow,.status-block span,.mission-facts dt){font-size:11px}

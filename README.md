@@ -12,6 +12,8 @@ A React + Three.js prototype for the recognition and after-action-review portion
 6. End early, or let the 45-second clock finish automatically. The debrief explains the score, preserves the event timeline, and lets you replay, repeat, export or print the session.
 7. **Progress** summarises every stored session: score trend, identification matrix, per-category and per-condition results, practice milestones, and a CSV export for instructors.
 
+The **EN / हिं** switch in the top bar changes the interface language between English and Hindi (remembered per browser). The training flow — mission setup, procedure, situation panel, classification, recognition cues, operator guide, and debrief/progress headings — is translated; sensor HUD abbreviations stay in English as on real displays, and generated debrief sentences are currently English. `src/i18n.ts` holds the dictionary, keyed by the English text so missing entries fall back safely.
+
 Keyboard shortcuts outside form controls: **Space** starts/holds/resumes, **O** records an observation, **1 / 2 / 3** classify, **T** cycles radar tracks (and slews the sensor), **I** toggles the EO/IR feed, **H** toggles the thermal scene view, **F** toggles fullscreen, **M** mutes rotor audio, and **?** opens the operator guide. Changing browser tabs pauses an active exercise. A welcome guide opens on the first visit.
 
 ## Included
