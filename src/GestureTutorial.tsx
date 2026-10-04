@@ -39,7 +39,7 @@ export default function GestureTutorial({ input, onClose }: Props) {
   }, []);
 
   const steps: { gesture: Gesture; action: string; title: string; detail: string }[] = [
-    { gesture: 'pan', action: 'PAN', title: trackpad ? 'One finger + click-drag' : 'Left-click + drag', detail: trackpad ? 'Hold the trackpad click and move one finger. Slide across Delhi without changing your viewing angle.' : 'Hold the left button and drag to move across the map.' },
+    { gesture: 'pan', action: 'PAN', title: trackpad ? 'One finger + click-drag' : 'Left-click + drag', detail: trackpad ? 'Hold the trackpad click and move one finger. Slide across the terrain without changing your viewing angle.' : 'Hold the left button and drag to move across the map.' },
     { gesture: 'orbit', action: 'ROTATE & TILT', title: trackpad ? 'Two-finger scroll' : 'Right-click + drag', detail: trackpad ? 'Without clicking, slide sideways to rotate around the view centre. Slide up or down to change the viewing angle.' : 'Hold the right button and drag sideways to rotate, or vertically to tilt. Shift + left-drag works too.' },
     { gesture: 'zoom', action: 'ZOOM', title: trackpad ? 'Pinch / spread' : 'Scroll wheel', detail: trackpad ? 'Spread two fingers to move closer; pinch together to pull back. Keep the pointer over the place you want to inspect.' : 'Scroll up to move closer and down to pull back. Zoom follows the pointer.' },
   ];
@@ -59,7 +59,7 @@ export default function GestureTutorial({ input, onClose }: Props) {
     </article>)}</div>
     <div className="gesture-extra">
       <p>{trackpad ? <><kbd>Shift</kbd> + two-finger scroll also pans. Safari supports a two-finger twist to rotate.</> : <><kbd>Shift</kbd> + scroll also rotates and tilts.</>}</p>
-      <p>{trackpad ? 'Moving one finger without clicking only moves the pointer. Keep gestures over the map.' : 'Keep the pointer over the map while navigating.'} Use <b>N</b> to face north, <b>2D</b> for top-down, or <b>Home</b> to return to Delhi.</p>
+      <p>{trackpad ? 'Moving one finger without clicking only moves the pointer. Keep gestures over the map.' : 'Keep the pointer over the map while navigating.'} Use <b>N</b> to face north, <b>2D</b> for top-down, or <b>Home</b> to return to the theatre site.</p>
     </div>
     <footer className="gesture-tutorial-foot"><span>Reopen this guide with the ? button on the map.</span><button className="primary-button" onClick={onClose}>Got it — try gestures</button></footer>
   </dialog>;

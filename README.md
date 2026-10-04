@@ -71,20 +71,31 @@ The 3D renderer loads separately from the application interface. Shadows and res
 
 Scenario movement, contact attitude, the sensor feed and the scoring rubric are illustrative. The EO/IR view is a rendered approximation, not a sensor model: it has no optics, detector noise or radiometric temperature model, and its background is sky only. The prototype does not implement operational engagement training, validated drone physics, real sensor data, or a learned AI model. Recommendations use explicit rules. The training scene is generated locally. Earth view streams geographic data and requires internet access; fonts fall back to system fonts when offline. Browser-local results belong to this device/browser and are not synchronized to a server.
 
-## Earth view
+## Theatres and Earth view
 
-The 3D district is the default environment; **Satellite** switches to Earth view. Earth view uses CesiumJS, centered near India Gate in New Delhi. Without a key it streams Esri World Imagery onto the Earth ellipsoid: this is satellite photography, **not reconstructed 3D buildings or elevation terrain**. The source label makes this distinction explicit. The local training scene remains available from the environment switch.
+The **Theatre** selector (mission setup or sensor HUD) chooses where the exercise is viewed. The trajectories, radar and scoring are identical in every theatre; only the scene changes. The choice is remembered per browser and is not stored in sessions.
 
-On a Mac, satellite view defaults to **Trackpad** input: **one-finger click-drag pans**, **two-finger scroll rotates horizontally or tilts vertically**, and **pinch zooms** around the pointer. Holding **Shift + two-finger scroll** is an alternate way to pan. Moving a finger without holding the click only moves the pointer. Safari also supports pinch and two-finger twist gestures. **Mouse** input restores wheel zoom; dragging pans, and right-drag or Shift-drag orbits. Use the map buttons for zoom, north, top-down, return to Delhi, and gesture help. An illustrated gesture tutorial opens the first time you enter satellite view in a tab; reopen it with the **?** button. Opening the guide pauses a live exercise or replay; resume when you are ready. The local district keeps its existing controls.
+| Theatre | Location | Terrain |
+| --- | --- | --- |
+| 3D training district | Synthetic city block (local, offline, supports thermal) | Urban |
+| India Gate | 28.6126° N, 77.2268° E, New Delhi | Dense urban |
+| Tololing | 34.4709° N, 75.7952° E, Drass sector, Kargil | High-altitude ridgeline |
+| Galwan Valley | 34.7492° N, 78.1656° E, Galwan–Shyok confluence | High-altitude valley |
+| Chamba hills | 32.6855° N, 76.1662° E, Himachal Pradesh | Forested Himalayan ridges |
+| Nathu La | 27.3868° N, 88.8310° E, Sikkim | High mountain pass |
+| Tawang | 27.5883° N, 91.8653° E, Arunachal Pradesh | Mountain town and valley |
+| Longewala | 27.5249° N, 70.1567° E, Thar Desert | Open desert |
+| Attari | 31.6046° N, 74.5731° E, Attari–Wagah crossing | Border plains |
 
-For actual Google photorealistic 3D buildings, copy `.env.example` to `.env.local` and configure either `VITE_GOOGLE_MAPS_API_KEY` (Map Tiles API enabled, billing configured) or `VITE_CESIUM_ION_TOKEN` with Google Photorealistic 3D Tiles access. Restart the server. Browser credentials are visible to users: use allowed HTTP referrers and API restrictions, and never use a server secret. Credentials are excluded from Git. Coverage and detail depend on the provider; Delhi coverage has not been verified with an authenticated account.
+On a Mac, geographic theatres default to **Trackpad** input: **one-finger click-drag pans**, **two-finger scroll rotates horizontally or tilts vertically**, and **pinch zooms** around the pointer. Holding **Shift + two-finger scroll** is an alternate way to pan. Moving a finger without holding the click only moves the pointer. Safari also supports pinch and two-finger twist gestures. **Mouse** input restores wheel zoom; dragging pans, and right-drag or Shift-drag orbits. Use the map buttons for zoom, north, top-down, return to the selected site, and gesture help. An illustrated gesture tutorial opens the first time you enter a geographic theatre in a tab; reopen it with the **?** button. Opening the guide pauses a live exercise or replay; resume when you are ready. The local district keeps its existing controls.
 
-Official setup: https://developers.google.com/maps/documentation/tile/get-api-key
-Cesium integration: https://cesium.com/learn/cesiumjs-learn/cesiumjs-photorealistic-3d-tiles
+Geographic theatres use CesiumJS. Without credentials they stream Esri World Imagery draped on **Esri World Elevation 3D terrain**, so mountains, valleys and ridgelines render in relief with sun shading. With `VITE_GOOGLE_MAPS_API_KEY` (Map Tiles API enabled) or `VITE_CESIUM_ION_TOKEN`, they use **Google Photorealistic 3D Tiles**, the Google Earth-style mesh; coverage and detail depend on Google. Copy `.env.example` to `.env.local` (and add the same variable in Vercel) to enable it. Browser credentials are visible to users: restrict them by HTTP referrer and API.
 
-The Cesium assets are copied locally by predev/prebuild. Attribution remains visible. Google tiles use a bounded streaming cache, with satellite fallback for failed authentication. There is no geocoding/search integration. Training contacts remain synthetic and follow the same recorded scenario and radar coordinates; each training unit maps to eight metres in Earth view. Guided mode sets a minimum contact size for visibility. Camera altitude presets are illustrative; photorealistic mode assumes a Delhi ground datum near 215 m, not a surveyed collision or ground-height solution.
+For each theatre the app samples the rendered surface on rings 150 m and 320 m around the site and sets the airspace datum to the highest point, so contacts fly over ridges rather than through them; the HUD shows the datum. Camera presets are framed per terrain (Overview / Ridgeline / Ground in mountains) and are raised automatically if they would end inside a slope. This is an illustrative placement, not a validated terrain-collision or line-of-sight model.
 
-`src/EarthScene.tsx` owns the geographic viewer and tears down its WebGL resources and callbacks on unmount. It creates one contact entity per generated contact, orients each from the shared kinematics, and articulates kite wings through glTF node transformations. `node --import tsx scripts/create-contact-models.mjs` regenerates the GLB contact models from `src/contactGeometry.ts`; `scripts/prepare-cesium.mjs` prepares runtime assets.
+The app draws its own site marker and does not overlay third-party boundary or place-name layers, whose depiction of borders may not match official Indian maps. Provider attribution stays visible. Thermal view is offered only in the training district, because satellite photography carries no heat information. Training contacts remain synthetic and follow the same recorded scenario and radar coordinates; each training unit maps to eight metres in Earth view. Guided mode sets a minimum on-screen contact size.
+
+`src/theatres.ts` lists the theatres and camera framing; `src/EarthScene.tsx` owns the geographic viewer and tears down its WebGL resources and callbacks on unmount. `node --import tsx scripts/create-contact-models.mjs` regenerates the GLB contact models from `src/contactGeometry.ts`; `scripts/prepare-cesium.mjs` prepares runtime assets.
 
 ## Radar and variation library
 
