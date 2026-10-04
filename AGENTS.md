@@ -48,7 +48,8 @@ node --import tsx scripts/create-contact-models.mjs
 | `src/storage.ts` | Validation and persistence of completed sessions |
 | `src/SceneView.tsx` | Environment selection, HUD, sensor panel, radar track selection (portalled into the situation panel) |
 | `src/DelhiScene.tsx` | Procedural district, Three.js contacts, local camera presets |
-| `src/EarthScene.tsx` | Cesium viewer, streamed imagery/tiles, geographic contacts, resource cleanup |
+| `src/theatres.ts` | Theatre catalogue (published coordinates), per-terrain camera framing, ground-sample rings |
+| `src/EarthScene.tsx` | Cesium viewer, imagery on 3D terrain or Google 3D tiles, airspace datum sampling, geographic contacts, cleanup |
 | `src/Radar.tsx` | Interactive synthetic situation display |
 | `src/radarMath.ts` | Radar projection, trails, and readouts |
 | `src/Review.tsx` | Score explanation, timeline, replay, history, JSON export, print |
@@ -83,8 +84,9 @@ node --import tsx scripts/create-contact-models.mjs
 - Thermal views are display approximations; do not describe them as radiometric or validated sensor output.
 - Radar contact inspection may record an observation during a live exercise, but preview and replay interactions must not alter exercise results. Radar track identity reflects the operator's classification, never the scenario category.
 - Keep the cockpit-inspired display legible and its controls usable at narrow widths. Check that radar, camera presets, attribution, and bottom controls do not overlap.
-- Earth view without credentials shows satellite photography on an ellipsoid. Do not label it as photorealistic 3D buildings or surveyed terrain. Google 3D coverage has not been verified for Delhi with an authenticated account.
-- Keep provider attribution visible and loading/failure states informative. The photorealistic ground-height assumption is illustrative, not a validated collision/terrain system.
+- Geographic theatres (`src/theatres.ts`) without credentials show Esri satellite imagery on Esri World Elevation terrain. Do not label it as photorealistic 3D buildings or surveyed terrain. Google 3D coverage has not been verified with an authenticated account. Cite a source for any new theatre coordinates.
+- Do not add third-party boundary or place-name overlays; their border depictions may not match official Indian maps. The app draws its own site marker.
+- Keep provider attribution visible and loading/failure states informative. The sampled airspace datum and camera ground clearance are illustrative, not a validated collision/terrain system.
 
 ## Credentials and generated files
 

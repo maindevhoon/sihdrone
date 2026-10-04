@@ -182,8 +182,9 @@ kbd{font-family:var(--mono);font-size:10px;line-height:1;color:var(--text-2);bac
 /* Earth view and provider attribution */
 .earth-canvas{position:absolute;inset:0}
 .earth-canvas .cesium-viewer,.earth-canvas .cesium-viewer-cesiumWidgetContainer,.earth-canvas .cesium-widget{width:100%;height:100%}
-.scene .earth-canvas .cesium-viewer-bottom{left:auto;right:12px;bottom:52px;max-width:calc(100% - 440px);font-size:9px;z-index:5}
-.replay-scene .earth-canvas .cesium-viewer-bottom{right:auto;left:50%;transform:translateX(-50%);bottom:52px;max-width:40%}
+/* Cesium positions its credits inline; keep provider attribution visible and clear of the sensor panel. */
+.scene .earth-canvas .cesium-viewer-bottom{left:auto!important;right:12px!important;bottom:52px!important;max-width:calc(100% - 440px);font-size:9px;z-index:5}
+.replay-scene .earth-canvas .cesium-viewer-bottom{right:auto!important;left:50%!important;transform:translateX(-50%);bottom:52px!important;max-width:40%}
 .earth-credits{background:#0a1016cc;border-radius:4px;padding:1px 6px}
 
 /* Session bar */
@@ -368,7 +369,7 @@ kbd{font-family:var(--mono);font-size:10px;line-height:1;color:var(--text-2);bac
   .stage>.scene{height:min(560px,74vh);min-height:440px}
   .heading-tape{display:none}
   .eo-panel{width:min(46%,320px)}
-  .scene .earth-canvas .cesium-viewer-bottom{right:12px;bottom:52px;max-width:50%}
+  .scene .earth-canvas .cesium-viewer-bottom{right:12px!important;bottom:52px!important;max-width:50%}
 }
 @media (max-width:640px){
   .topbar{height:52px}
@@ -387,7 +388,7 @@ kbd{font-family:var(--mono);font-size:10px;line-height:1;color:var(--text-2);bac
   .eo-panel{left:8px;bottom:52px;width:min(78%,300px)}
   .eo-show{left:8px;bottom:52px}
   .eo-foot{gap:8px;font-size:9px}
-  .scene .earth-canvas .cesium-viewer-bottom{right:auto;left:8px;bottom:8px;max-width:calc(100% - 210px)}
+  .scene .earth-canvas .cesium-viewer-bottom{right:auto!important;left:8px!important;bottom:8px!important;max-width:calc(100% - 210px)}
   .session-bar{flex-wrap:wrap;gap:10px}
   .session-bar .progress-track{order:3;flex-basis:100%}
   .session-bar .text-button{margin-left:auto}
@@ -551,3 +552,12 @@ kbd{font-family:var(--mono);font-size:10px;line-height:1;color:var(--text-2);bac
 .size-card tr:first-child th,.size-card tr:first-child td{border-top:0}
 .size-card p{font-size:11.5px;color:var(--dim);margin-top:6px}
 @media (max-width:640px){.airframe-ref{grid-template-columns:1fr}}
+
+/* Theatre selection in the sensor HUD */
+.theatre-control select{width:auto;max-width:240px;font-size:11.5px;padding:7px 28px 7px 10px;color:#e9eff4;background-color:#0a1016c7;background-position:right 9px center;border-color:#ffffff1a;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.scene-tools .icon-button[aria-pressed=true]{color:var(--accent)}
+@media (max-width:640px){.theatre-control select{max-width:180px}}
+
+/* The heading tape needs room between the status block and the scene tools. */
+.scene{container-type:inline-size}
+@container (max-width:1000px){.heading-tape{display:none}}

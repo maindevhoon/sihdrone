@@ -5,6 +5,7 @@ import { readProfile, readSessions, saveProfile, saveSessions, type Profile } fr
 import Review from './Review';
 import RecognitionGuide from './RecognitionGuide';
 import HelpDialog from './HelpDialog';
+import { THEATRES, theatreById, type TheatreId } from './theatres';
 const Progress=lazy(()=>import('./Progress'));
 import {createVariationDeck, variationNumber, VARIATION_SEEDS} from './variations';
 const SceneView=lazy(()=>import('./SceneView'));
@@ -34,6 +35,10 @@ export default function App() {
   const [notice,setNotice]=useState('');
   const [cameraView,setCameraView]=useState<CameraView>('overview');
   const [page,setPage]=useState<'exercise'|'progress'>('exercise');
+  // The theatre is a view choice, not part of the scenario or the saved session, so it is remembered per browser.
+  const [theatreId,setTheatreId]=useState<TheatreId>(()=>{try{return theatreById(localStorage.getItem('aeron-theatre')??'district').id;}catch{return 'district';}});
+  const theatre=theatreById(theatreId);
+  const changeTheatre=useCallback((id:TheatreId)=>{setTheatreId(id);try{localStorage.setItem('aeron-theatre',id);}catch{/* preference only */}},[]);
   const [profile,setProfile]=useState<Profile>(readProfile);
   // First visit opens the welcome guide; afterwards it is available from the help button or "?".
   const [help,setHelp]=useState<'welcome'|'help'|null>(()=>{try{return localStorage.getItem('aeron-onboarded-v1')?null:'welcome';}catch{return null;}});
@@ -109,13 +114,14 @@ export default function App() {
         <div className="panel-head"><span>MISSION SETUP</span><span className="tag">{difficulty==='guided'?'GUIDED':'CHALLENGE'}</span></div>
         <div className="panel-scroll">
           <div className="mission-title"><h1>{definition.title}</h1><p>{definition.description}</p></div>
+          <div className="field"><label className="section-label" htmlFor="theatre-select">THEATRE</label><select id="theatre-select" value={theatre.id} onChange={e=>changeTheatre(e.target.value as TheatreId)}>{THEATRES.map(t=><option key={t.id} value={t.id}>{t.kind==='synthetic'?'3D training district (offline)':`${t.name} — ${t.region}`}</option>)}</select><span className="seed-value">{theatre.kind==='synthetic'?'Locally rendered city block; supports thermal view.':`${theatre.terrainLabel} · satellite imagery on 3D terrain`}</span></div>
           <div className="field"><label className="section-label" htmlFor="exercise-select">EXERCISE</label><select id="exercise-select" value={exercise} disabled={locked} onChange={e=>{setExercise(e.target.value as ExerciseId);setSeed(newSeed());}}>{exercises.map(e=><option key={e.id} value={e.id}>{e.short}</option>)}</select></div>
           <div className="field"><span className="section-label">DIFFICULTY</span><div className="segmented"><button aria-pressed={difficulty==='guided'} disabled={locked} onClick={()=>setDifficulty('guided')}>Guided</button><button aria-pressed={difficulty==='challenge'} disabled={locked} onClick={()=>setDifficulty('challenge')}>Challenge</button></div></div>
           <div className="field"><span className="section-label">LIGHTING</span><div className="segmented"><button aria-pressed={!dusk} disabled={locked} onClick={()=>setDusk(false)}><Sun size={14}/>Day</button><button aria-pressed={dusk} disabled={locked} onClick={()=>setDusk(true)}><Moon size={14}/>Dusk</button></div></div>
           <div className="field"><div className="field-row"><label htmlFor="variation-select" className="section-label">VARIATION</label><button className="shuffle-button" disabled={locked} onClick={()=>setSeed(newSeed())} aria-label="New scenario variation" title="New scenario variation"><Shuffle size={13}/>Shuffle</button></div>
             <select id="variation-select" aria-label="Choose scenario variation" value={seed} disabled={locked} onChange={e=>{setSeed(Number(e.target.value));setScenarioVersion(2);}}>{variation===null&&<option value={seed}>Saved seed {seed}</option>}{VARIATION_SEEDS.map((value,index)=><option key={value} value={value}>Variation {(index+1).toString().padStart(3,'0')} · Seed {value}</option>)}</select>
             <span className="seed-value">SEED {seed} · {variation?`${variation.toString().padStart(3,'0')} of 200`:'saved variation'} · shuffle avoids repeats</span></div>
-          <dl className="mission-facts"><div><dt>Area</dt><dd>Central New Delhi</dd></div><div><dt>Window</dt><dd>{scenario.duration} s</dd></div><div><dt>Visibility</dt><dd>{difficulty==='guided'?'Light urban haze':'Dense urban haze'}</dd></div><div><dt>Sensors</dt><dd>Radar · EO/IR</dd></div></dl>
+          <dl className="mission-facts"><div><dt>Area</dt><dd>{theatre.kind==='synthetic'?'Training district':theatre.name}</dd></div><div><dt>Window</dt><dd>{scenario.duration} s</dd></div><div><dt>Visibility</dt><dd>{difficulty==='guided'?'Light urban haze':'Dense urban haze'}</dd></div><div><dt>Sensors</dt><dd>Radar · EO/IR</dd></div></dl>
           <div className="briefing"><span className="section-label">PROCEDURE</span><ol>
             <li><b>Detect</b><span>Scan the skyline and the radar for new returns.</span></li>
             <li><b>Observe</b><span>Click the aircraft or its radar track, or press <kbd>O</kbd>.</span></li>
@@ -124,8 +130,8 @@ export default function App() {
         </div>
         <div className="panel-foot"><button className="primary-button" onClick={primary.action}>{primary.icon}{primary.label}{phase==='ready'?<span>{scenario.duration}s</span>:phase==='running'?<kbd>Space</kbd>:null}</button><p className="demo-note">Synthetic encounters · results stay in this browser</p></div>
       </aside>
-      <section className="stage">{review&&result?<Review key={result.id} session={result} history={history} profile={profile} onSelectSession={selectSession} onRepeat={()=>repeat(result)} onNext={nextChallenge}/>:<>
-        <Suspense fallback={<div className="scene scene-loading"><span className="loader"/><p>Preparing the sensor view…</p></div>}><SceneView scenario={scenario} time={time} displayTime={phase==='ready'?previewTime:elapsed} selected={detected!==null} phase={phase==='ready'?'preview':phase==='paused'?'paused':'running'} cameraView={cameraView} onCameraChange={setCameraView} onSelect={mark} onResume={resume} onNotice={setNotice} radarTarget={radarSlot} assessment={answer}/></Suspense>
+      <section className="stage">{review&&result?<Review key={result.id} session={result} history={history} profile={profile} theatre={theatre} onTheatreChange={changeTheatre} onSelectSession={selectSession} onRepeat={()=>repeat(result)} onNext={nextChallenge}/>:<>
+        <Suspense fallback={<div className="scene scene-loading"><span className="loader"/><p>Preparing the sensor view…</p></div>}><SceneView scenario={scenario} time={time} displayTime={phase==='ready'?previewTime:elapsed} selected={detected!==null} phase={phase==='ready'?'preview':phase==='paused'?'paused':'running'} cameraView={cameraView} onCameraChange={setCameraView} onSelect={mark} onResume={resume} onNotice={setNotice} radarTarget={radarSlot} assessment={answer} theatre={theatre} onTheatreChange={changeTheatre}/></Suspense>
         <div className="session-bar">
           <button className="session-action" onClick={primary.action}>{primary.icon}{primary.label}</button>
           <div className="session-clock mono">{formatTime(elapsed)}<span> / {formatTime(scenario.duration)}</span></div>

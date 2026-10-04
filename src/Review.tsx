@@ -3,10 +3,11 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Check, ChevronRight, Download, Eye, Flag, Focus, Layers, Pause, Play, Printer, RotateCcw, X } from 'lucide-react';
 import type { Profile } from './storage';
 import { airframeFor, BLACK_KITE } from './airframes';
+import type { Theatre, TheatreId } from './theatres';
 import { exercises, formatTime, recommendation, type CameraView, type Session } from './simulation';
 const SceneView=lazy(()=>import('./SceneView'));
 const noop=()=>{};
-function Replay({session}: {session:Session}) {
+function Replay({session,theatre,onTheatreChange}: {session:Session;theatre:Theatre;onTheatreChange:(id:TheatreId)=>void}) {
   const [elapsed,setElapsed]=useState(0);
   const [playing,setPlaying]=useState(false);
   const [camera,setCamera]=useState<CameraView>('overview');
@@ -20,12 +21,12 @@ function Replay({session}: {session:Session}) {
   // The radar shows the operator's assessment only from the moment it was recorded.
   const classifiedAt=session.events.filter(e=>e.type==='classification').at(-1)?.time;
   const assessment=classifiedAt!==undefined&&elapsed>=classifiedAt?session.answer:'';
-  return <div className="replay-container"><Suspense fallback={<div className="scene scene-loading">Preparing replay…</div>}><SceneView scenario={session.scenario} time={time} displayTime={elapsed} selected={session.detection!==null&&elapsed>=session.detection} phase="replay" cameraView={camera} onCameraChange={setCamera} onSelect={noop} assessment={assessment}/></Suspense>
+  return <div className="replay-container"><Suspense fallback={<div className="scene scene-loading">Preparing replay…</div>}><SceneView scenario={session.scenario} time={time} displayTime={elapsed} selected={session.detection!==null&&elapsed>=session.detection} phase="replay" cameraView={camera} onCameraChange={setCamera} onSelect={noop} assessment={assessment} theatre={theatre} onTheatreChange={onTheatreChange}/></Suspense>
     <div className="replay-controls"><button onClick={toggle} aria-label={playing?'Pause replay':'Play replay'}>{playing?<Pause size={16}/>:<Play size={16}/>}</button><span>{formatTime(elapsed)}</span><div className="replay-track"><input type="range" aria-label="Replay position" min={0} max={session.duration} step={.05} value={elapsed} onChange={e=>seek(Number(e.target.value))}/>{session.events.filter(e=>e.type==='observation'||e.type==='classification').map((event,i)=><span className={`replay-marker marker-${event.type}`} key={i} style={{left:`${session.duration?event.time/session.duration*100:0}%`}} title={`${event.label} at ${event.time.toFixed(1)}s`}/>)}</div><span>{formatTime(session.duration)}</span></div>
     <p className="replay-caption">Same variation, same movement. Amber marks your observation; green marks a classification. Replay does not change the result.</p>
   </div>;
 }
-export default function Review({session,history,profile,onSelectSession,onRepeat,onNext}: {session:Session;history:Session[];profile:Profile;onSelectSession:(id:string)=>void;onRepeat:()=>void;onNext:()=>void}) {
+export default function Review({session,history,profile,theatre,onTheatreChange,onSelectSession,onRepeat,onNext}: {session:Session;history:Session[];profile:Profile;theatre:Theatre;onTheatreChange:(id:TheatreId)=>void;onSelectSession:(id:string)=>void;onRepeat:()=>void;onNext:()=>void}) {
   const [replay,setReplay]=useState(false);
   const correct=session.classificationScore===60;
   const definition=exercises.find(e=>e.id===session.scenario.exercise)!;
@@ -43,7 +44,7 @@ export default function Review({session,history,profile,onSelectSession,onRepeat
       <small>{airframe?`Published figures (${airframe.source}); the simulated airframe is built to them.`:'Typical published figures for the species; the simulated bird is built to them.'}</small></div>
     <div className="score-breakdown"><div><span>Observation timing</span><span>{session.detectionScore}<i>/40</i></span></div><div className="breakdown-track"><span style={{width:`${session.detectionScore/40*100}%`}}/></div><div><span>Classification</span><span>{session.classificationScore}<i>/60</i></span></div><div className="breakdown-track classification-score"><span style={{width:`${session.classificationScore/60*100}%`}}/></div></div>
     <div className="review-actions"><button className="replay-button" onClick={()=>setReplay(!replay)}>{replay?<X size={15}/>:<Play size={15}/>} {replay?'Close replay':'Replay session'}</button><button className="text-button" onClick={onRepeat}><RotateCcw size={14}/>Repeat variation</button><button className="text-button" onClick={exportSession}><Download size={14}/>Export result</button><button className="text-button" onClick={()=>{setReplay(false);setTimeout(()=>window.print(),50);}}><Printer size={14}/>Print report</button></div>
-    {replay&&<Replay session={session}/>}
+    {replay&&<Replay session={session} theatre={theatre} onTheatreChange={onTheatreChange}/>}
     <div className="timeline-heading"><h3>Session timeline</h3><span>{session.duration.toFixed(1)}s · {session.events.length} events</span></div><div className="timeline">{[{time:session.scenario.arrival,type:'arrival',label:'Aerial objects entered the district'},...session.events].sort((a,b)=>a.time-b.time).filter(e=>e.time<=session.duration).map((event,i)=><div key={i}><span className={`timeline-dot event-${event.type}`}/><time>{event.time.toFixed(1).padStart(4,'0')}s</time><span>{event.label}</span></div>)}</div>
     <div className="feedback"><Focus size={22}/><div><strong>Next exercise</strong><p>{recommendation(session)}</p></div><button onClick={onNext} aria-label="Set up the suggested next exercise"><ChevronRight size={19}/></button></div>
     <div className="history-heading"><h3>Your practice history</h3><select aria-label="Choose saved session" value={session.id} onChange={e=>onSelectSession(e.target.value)}>{history.map((item,index)=><option key={item.id} value={item.id}>{index===0?'Latest':index+1}. {exercises.find(e=>e.id===item.scenario.exercise)?.short} · {item.score}/100</option>)}</select></div>
