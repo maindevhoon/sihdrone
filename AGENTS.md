@@ -1,0 +1,89 @@
+# Agent guide — Aeron
+
+This file applies to the entire repository. Follow the user's current request and keep changes focused on it.
+
+## Project
+
+Aeron is the SIH26247 drone-observation prototype: choose a scenario, observe and classify synthetic aerial objects, then review the recorded session. The interface uses React, TypeScript, and Vite. Three.js/React Three Fiber render the local Delhi-inspired district; Cesium renders the geographic Earth view.
+
+- Repository: https://github.com/maindevhoon/sihdrone
+- Production: https://sihdrone.vercel.app
+- Vercel project: `sihdrone`, under `maindevhoons-projects`.
+- There is no backend, account system, or database. Results are stored in the browser.
+- Read `README.md` for implemented behavior. `PLAN.md` is a broader roadmap and contains historical assumptions; do not describe its planned features as completed work.
+
+## Commands
+
+```sh
+npm ci
+npm run dev -- --port 5173 --strictPort
+npm test
+npm run build
+npm run preview -- --port 4173
+```
+
+Use the existing npm lockfile. Check whether a development server is already running before starting another. The development server binds to `127.0.0.1`.
+
+`predev` and `prebuild` run `scripts/prepare-cesium.mjs`, which copies Cesium runtime assets into `public/cesium/`. Use `npm run build` so this preparation runs; invoking `vite build` alone can omit required assets on a fresh checkout.
+
+To regenerate the original contact models after editing their geometry:
+
+```sh
+node scripts/create-contact-models.mjs
+```
+
+## Code map
+
+| File | Responsibility |
+| --- | --- |
+| `src/App.tsx` | Setup, exercise clock, session transitions, observation/classification, keyboard controls |
+| `src/simulation.ts` | Scenario types, seeded generation, contact positions, scoring, recommendations |
+| `src/variations.ts` | Stable 200-seed library and shuffled selection deck |
+| `src/storage.ts` | Validation and persistence of completed sessions |
+| `src/SceneView.tsx` | Environment selection, shared scene controls, overlays, radar integration |
+| `src/DelhiScene.tsx` | Procedural district, Three.js contacts, local camera presets |
+| `src/EarthScene.tsx` | Cesium viewer, streamed imagery/tiles, geographic contacts, resource cleanup |
+| `src/Radar.tsx` | Interactive synthetic situation display |
+| `src/radarMath.ts` | Radar projection, trails, and readouts |
+| `src/Review.tsx` | Score explanation, timeline, replay, history, JSON export |
+| `src/styles.css` | Shared styling and responsive layouts |
+| `src/*.test.ts` | Node tests for simulation, radar, variations, and persistence |
+| `scripts/` | Cesium asset preparation and contact-model generation |
+
+## Simulation and persistence rules
+
+- Keep scenario generation, positions, and scoring deterministic for a given scenario version, seed, and simulation time. Randomness belongs in scenario/deck creation, never in frame rendering or replay.
+- Use `contactPosition` and `visibleContacts` as the shared source for both renderers, radar, and replay. Support the full generated contact count in every view; do not assume a fixed maximum from one sample scenario.
+- The scenario format currently supports versions 1 and 2. Preserve the version-1 path when loading or repeating older records. If generation or motion semantics change, version them explicitly and update validation and compatibility tests.
+- The session format is separately versioned at 1, with storage key `aeron-sessions-v1`. Storage validates regenerated scenario fields and recomputed scores. Update these together when changing the schema or scoring, with an explicit migration/compatibility decision.
+- Keep the 200 numbered seed entries stable. Shuffle should cover a complete cycle without repeats and avoid repeating the current seed at a cycle boundary. Display the full seed so a variation can be reproduced.
+- All motion, radar trails, sweep animation, and recorded events use the exercise clock. Pause must freeze simulation time. An active exercise pauses when the document becomes hidden.
+- Observation time must fall after contact arrival and before the session ends to earn credit. Classification credit requires a valid observation.
+- Replay must not modify the saved session or its score. Handle malformed/unavailable browser storage without breaking the exercise; history currently retains up to 20 results.
+
+## Rendering and radar
+
+- Preserve the local training scene and the Earth view. Keep heavy renderer code lazy-loaded, bound resource usage, and dispose of WebGL resources, controls, event handlers, and textures when appropriate. Check lifecycle changes under React StrictMode.
+- The simulation uses `[x, y, z]`, with `y` as altitude. Radar uses an observer at `[0, 0, 12]`. Earth mode maps each training unit to eight metres; the local scene uses one. Keep projection, range rings, trails, and numeric readouts consistent with the selected scale.
+- Radar heading-up mode rotates the projection using camera heading. Preserve range when rotating, count out-of-range contacts accurately, and never clamp them to misleading positions on the scope.
+- Radar contact inspection may record an observation during a live exercise, but preview and replay interactions must not alter exercise results.
+- Keep the cockpit-inspired display legible and its controls usable at narrow widths. Check that radar, camera presets, attribution, and bottom controls do not overlap.
+- Earth view without credentials shows satellite photography on an ellipsoid. Do not label it as photorealistic 3D buildings or surveyed terrain. Google 3D coverage has not been verified for Delhi with an authenticated account.
+- Keep provider attribution visible and loading/failure states informative. The photorealistic ground-height assumption is illustrative, not a validated collision/terrain system.
+
+## Credentials and generated files
+
+- Optional browser configuration lives in `.env.local`: `VITE_GOOGLE_MAPS_API_KEY` or `VITE_CESIUM_ION_TOKEN`. See `.env.example`. Vite values are embedded in the browser bundle; never put server secrets in them. Use provider restrictions for browser credentials.
+- Do not commit credentials, `.vercel/`, `node_modules/`, `dist/`, `public/cesium/`, `.verification/`, or TypeScript build caches.
+- Commit the original generated `public/models/*.glb` assets together with relevant model-generator changes.
+- Keep the simulation usable without paid-service credentials. Preserve the current distinction between synthetic training data, satellite imagery, and authenticated 3D tile data.
+
+## Verification and delivery
+
+- For simulation, radar math, seed, or persistence changes, run `npm test` and add behavior tests for meaningful new edge cases. For application code or build changes, run `npm run build`.
+- For UI/renderer changes, verify in a browser: scene loading, changed controls, contact/radar agreement, pause/resume, and relevant replay behavior. Check a narrow viewport and browser errors. A successful Vite startup or build alone does not verify WebGL rendering.
+- Documentation-only changes need a content/path review, not a full browser or test run.
+- Avoid unrelated rewrites of compact existing files. Keep pure logic outside React/render loops; use readable TypeScript for new code and accessible labels for interactive controls.
+- Vercel builds with `npm run build` and publishes `dist`. The GitHub integration deploys pushes to `main`; treat a push there as a production deployment and account for the user's requested scope.
+- When deployment is requested, verify the live page and renderer assets after Vercel reports readiness. Report the actual URL and any remaining limitation; do not equate a successful upload with a verified site.
+- In the handoff, state what changed, what was checked, and any material limitation. Keep prototype claims grounded in implemented behavior: synthetic encounters and rule-based scoring are not validated sensor performance or learned AI.
