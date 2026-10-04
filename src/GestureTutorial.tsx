@@ -44,7 +44,7 @@ export default function GestureTutorial({ input, onClose }: Props) {
     { gesture: 'zoom', action: 'ZOOM', title: trackpad ? 'Pinch / spread' : 'Scroll wheel', detail: trackpad ? 'Spread two fingers to move closer; pinch together to pull back. Keep the pointer over the place you want to inspect.' : 'Scroll up to move closer and down to pull back. Zoom follows the pointer.' },
   ];
 
-  return <dialog ref={dialog} className="gesture-tutorial" aria-labelledby="gesture-tutorial-title" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => {
+  return <dialog ref={dialog} className="gesture-tutorial" aria-modal="true" aria-labelledby="gesture-tutorial-title" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => {
     const rect = event.currentTarget.getBoundingClientRect();
     if (event.target === event.currentTarget && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) onClose();
   }}>

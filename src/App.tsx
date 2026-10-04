@@ -1,9 +1,11 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronRight, Eye, Focus, Moon, Pause, Play, Radio, RotateCcw, Shuffle, Sun, X } from 'lucide-react';
+import { Check, ChevronRight, CircleHelp, Eye, Focus, Moon, Pause, Play, Radio, RotateCcw, Shuffle, Sun, X } from 'lucide-react';
 import { categories, createScenario, exercises, formatTime, scoreSession, visibleContacts, type CameraView, type Category, type Difficulty, type ExerciseId, type Session, type SessionEvent } from './simulation';
-import { readSessions, saveSessions } from './storage';
+import { readProfile, readSessions, saveProfile, saveSessions, type Profile } from './storage';
 import Review from './Review';
 import RecognitionGuide from './RecognitionGuide';
+import HelpDialog from './HelpDialog';
+const Progress=lazy(()=>import('./Progress'));
 import {createVariationDeck, variationNumber, VARIATION_SEEDS} from './variations';
 const SceneView=lazy(()=>import('./SceneView'));
 type Phase='ready'|'running'|'paused'|'review';
@@ -31,6 +33,12 @@ export default function App() {
   const [selectedId,setSelectedId]=useState<string|null>(history[0]?.id||null);
   const [notice,setNotice]=useState('');
   const [cameraView,setCameraView]=useState<CameraView>('overview');
+  const [page,setPage]=useState<'exercise'|'progress'>('exercise');
+  const [profile,setProfile]=useState<Profile>(readProfile);
+  // First visit opens the welcome guide; afterwards it is available from the help button or "?".
+  const [help,setHelp]=useState<'welcome'|'help'|null>(()=>{try{return localStorage.getItem('aeron-onboarded-v1')?null:'welcome';}catch{return null;}});
+  const closeHelp=useCallback(()=>{setHelp(null);try{localStorage.setItem('aeron-onboarded-v1','1');}catch{/* preference only */}},[]);
+  function updateProfile(next:Profile){setProfile(next);saveProfile(next);}
   const result=history.find(s=>s.id===selectedId)||history[0];
   const active=phase==='running'||phase==='paused';
   const review=phase==='review'&&!!result;
@@ -70,7 +78,9 @@ export default function App() {
   useEffect(()=>{const keydown=(event:KeyboardEvent)=>{
     const element=event.target as HTMLElement;
     if(element.closest('input,select,textarea,button,a')||event.altKey||event.ctrlKey||event.metaKey||event.repeat)return;
+    if(document.querySelector('[aria-modal="true"]'))return;
     if(event.code==='Space'){event.preventDefault();if(phaseRef.current==='running')pause();else if(phaseRef.current==='paused')resume();}
+    if(event.key==='?'){setHelp('help');return;}
     if(event.key.toLowerCase()==='o')mark();
     if(['1','2','3'].includes(event.key))classify(categories[Number(event.key)-1]);
   };window.addEventListener('keydown',keydown);return()=>window.removeEventListener('keydown',keydown);},[pause,resume,mark,classify]);
@@ -84,13 +94,16 @@ export default function App() {
   return <div className="app-shell">
     <header className="topbar">
       <a className="brand" href="/" aria-label="Aeron home"><span className="brand-mark"><Focus size={17}/></span><span className="brand-name">AERON</span><span className="brand-sub">Airspace observation trainer</span></a>
-      <nav className="tabs" aria-label="Workspace"><button aria-current={!review?'page':undefined} onClick={()=>{if(review)reset();}}>Exercise</button><button aria-current={review?'page':undefined} disabled={!result||active} onClick={()=>{if(result)selectSession(result.id);transition('review');}}>Debrief{history.length>0&&<span className="nav-count">{history.length}</span>}</button></nav>
+      <nav className="tabs" aria-label="Workspace"><button aria-current={page==='exercise'&&!review?'page':undefined} onClick={()=>{setPage('exercise');if(review)reset();}}>Exercise</button><button aria-current={page==='exercise'&&review?'page':undefined} disabled={!result||active} onClick={()=>{setPage('exercise');if(result)selectSession(result.id);transition('review');}}>Debrief{history.length>0&&<span className="nav-count">{history.length}</span>}</button><button aria-current={page==='progress'?'page':undefined} disabled={active} onClick={()=>setPage('progress')}>Progress</button></nav>
       <div className="topbar-status">
         <div className="status-block"><span>SCENARIO</span><strong>{definition.short} · {variation?`V${variation.toString().padStart(3,'0')}`:'Saved seed'}</strong></div>
         <div className="status-block"><span>EXERCISE CLOCK</span><strong className="mono">{formatTime(review&&result?result.duration:elapsed)}<small> / {formatTime(scenario.duration)}</small></strong></div>
+        {profile.name&&<div className="status-block"><span>TRAINEE</span><strong>{profile.name}</strong></div>}
         <span className={`state-pill state-${phase}`}><span className="state-dot"/>{stateLabel}</span>
+        <button className="icon-button help-button" aria-label="Operator guide and shortcuts" title="Operator guide (?)" onClick={()=>setHelp('help')}><CircleHelp size={17}/></button>
       </div>
     </header>
+    {page==='progress'?<main className="console console-progress"><Suspense fallback={<div className="scene-loading"><span className="loader"/></div>}><Progress history={history} profile={profile} onProfile={updateProfile} onOpenSession={id=>{selectSession(id);setPage('exercise');transition('review');}} onStart={()=>{setPage('exercise');if(review)reset();}}/></Suspense></main>:
     <main className={`console ${review?'console-review':''}`}>
       <aside className="panel mission" aria-label="Mission setup">
         <div className="panel-head"><span>MISSION SETUP</span><span className="tag">{difficulty==='guided'?'GUIDED':'CHALLENGE'}</span></div>
@@ -111,7 +124,7 @@ export default function App() {
         </div>
         <div className="panel-foot"><button className="primary-button" onClick={primary.action}>{primary.icon}{primary.label}{phase==='ready'?<span>{scenario.duration}s</span>:phase==='running'?<kbd>Space</kbd>:null}</button><p className="demo-note">Synthetic encounters · results stay in this browser</p></div>
       </aside>
-      <section className="stage">{review&&result?<Review key={result.id} session={result} history={history} onSelectSession={selectSession} onRepeat={()=>repeat(result)} onNext={nextChallenge}/>:<>
+      <section className="stage">{review&&result?<Review key={result.id} session={result} history={history} profile={profile} onSelectSession={selectSession} onRepeat={()=>repeat(result)} onNext={nextChallenge}/>:<>
         <Suspense fallback={<div className="scene scene-loading"><span className="loader"/><p>Preparing the sensor view…</p></div>}><SceneView scenario={scenario} time={time} displayTime={phase==='ready'?previewTime:elapsed} selected={detected!==null} phase={phase==='ready'?'preview':phase==='paused'?'paused':'running'} cameraView={cameraView} onCameraChange={setCameraView} onSelect={mark} onResume={resume} onPause={pause} onNotice={setNotice} radarTarget={radarSlot} assessment={answer}/></Suspense>
         <div className="session-bar">
           <button className="session-action" onClick={primary.action}>{primary.icon}{primary.label}</button>
@@ -136,7 +149,8 @@ export default function App() {
           <RecognitionGuide difficulty={difficulty}/>
         </div>
       </aside>}
-    </main>
+    </main>}
+    {help&&<HelpDialog welcome={help==='welcome'} onClose={closeHelp}/>}
     {notice&&<div className="notice" role="status">{notice}<button aria-label="Dismiss message" onClick={()=>setNotice('')}><X size={14}/></button></div>}
   </div>;
 }

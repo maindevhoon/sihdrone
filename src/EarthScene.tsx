@@ -13,6 +13,7 @@ import type { NavigationInput } from './earthNavigationMath';
 import { Compass, Home, Minus, Plus, HelpCircle } from 'lucide-react';
 import GestureTutorial from './GestureTutorial';
 import { birdAttitude, contactKinematics, droneAttitude, wingBeat } from './kinematics';
+import { airframeFor } from './airframes';
 
 type Props = {
   scenario: Scenario; time: MutableRefObject<number>; selected: boolean;
@@ -79,7 +80,7 @@ export default function EarthScene(props: Props) {
       return Matrix4.multiplyByPoint(frame(), new Cartesian3(x*8,-z*8,y*8), result || new Cartesian3());
     };
     // Real-size airframes; Cesium enlarges them to a minimum on-screen size so they stay detectable.
-    const modelUri = () => `/models/${current.current.scenario.category==='Bird'?'bird':'drone'}.glb`;
+    const modelUri = () => {const airframe=airframeFor(current.current.scenario);return `/models/${airframe?`drone-${airframe.id}`:'bird'}.glb`;};
     const attitude = (index: number) => {
       const {scenario,time} = current.current, k = contactKinematics(scenario, time.current, index);
       return {k, a: scenario.category==='Bird' ? birdAttitude(k) : droneAttitude(k)};
@@ -111,7 +112,7 @@ export default function EarthScene(props: Props) {
     const update = viewer.scene.preRender.addEventListener(() => {
       const {scenario,time,selected} = current.current;
       ensureContacts(scenario.count);
-      const signature=`${scenario.category}/${scenario.difficulty}/${selected}/${scenario.count}`;
+      const signature=`${modelUri()}/${scenario.difficulty}/${selected}/${scenario.count}`;
       for (let index=0;index<contacts.length;index++) {
         const contact=contacts[index];
         contact.show=index<scenario.count && time.current>=scenario.arrival;
