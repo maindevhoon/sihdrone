@@ -55,6 +55,7 @@ The automated checks cover seeded reproduction, contact arrival, scoring edge ca
 - `src/App.tsx`: console layout, the live simulation clock, controls, and session lifecycle.
 - `src/DelhiScene.tsx`: district geometry, vehicles, and camera motion; `src/ContactModel.tsx` places contacts in it.
 - `src/SceneView.tsx`: renderer selection, HUD, heading tape, sensor panel, graphics options, and fullscreen.
+- `src/earthNavigation.ts`: satellite gestures, camera bounds, and input cleanup; `src/earthNavigationMath.ts` contains testable input/zoom/orbit math.
 - `src/SensorFeed.tsx`: the EO/IR camera.
 - `src/Radar.tsx`: shared-position radar visualization.
 - `src/RecognitionGuide.tsx`: recognition cues.
@@ -73,6 +74,8 @@ Scenario movement, contact attitude, the sensor feed and the scoring rubric are 
 ## Earth view
 
 The 3D district is the default environment; **Satellite** switches to Earth view. Earth view uses CesiumJS, centered near India Gate in New Delhi. Without a key it streams Esri World Imagery onto the Earth ellipsoid: this is satellite photography, **not reconstructed 3D buildings or elevation terrain**. The source label makes this distinction explicit. The local training scene remains available from the environment switch.
+
+On a Mac, satellite view defaults to **Trackpad** input: **one-finger click-drag pans**, **two-finger scroll rotates horizontally or tilts vertically**, and **pinch zooms** around the pointer. Holding **Shift + two-finger scroll** is an alternate way to pan. Moving a finger without holding the click only moves the pointer. Safari also supports pinch and two-finger twist gestures. **Mouse** input restores wheel zoom; dragging pans, and right-drag or Shift-drag orbits. Use the map buttons for zoom, north, top-down, return to Delhi, and gesture help. An illustrated gesture tutorial opens the first time you enter satellite view in a tab; reopen it with the **?** button. Opening the guide pauses a live exercise or replay; resume when you are ready. The local district keeps its existing controls.
 
 For actual Google photorealistic 3D buildings, copy `.env.example` to `.env.local` and configure either `VITE_GOOGLE_MAPS_API_KEY` (Map Tiles API enabled, billing configured) or `VITE_CESIUM_ION_TOKEN` with Google Photorealistic 3D Tiles access. Restart the server. Browser credentials are visible to users: use allowed HTTP referrers and API restrictions, and never use a server secret. Credentials are excluded from Git. Coverage and detail depend on the provider; Delhi coverage has not been verified with an authenticated account.
 
