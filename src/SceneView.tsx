@@ -1,12 +1,14 @@
-import { Component, lazy, Suspense, useCallback, useEffect, useState, type MutableRefObject, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Canvas } from '@react-three/fiber';
-import { Focus, Maximize2, Minus, Pause, Play, Plus, Video, VideoOff } from 'lucide-react';
+import { Focus, Maximize2, Minus, Pause, Play, Plus, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 const EarthScene = lazy(() => import('./EarthScene'));
 const DelhiScene = lazy(() => import('./DelhiScene'));
 import Radar from './Radar';
 import SensorFeed, { type SensorMode, type SensorTelemetry } from './SensorFeed';
-import type { CameraView, Category, Scenario } from './simulation';
+import { visibleContacts, type CameraView, type Category, type Scenario } from './simulation';
+import { contactKinematics } from './kinematics';
+import { bladePass, combinedLevel, rotorLevel, RotorAudio } from './acoustics';
 class SceneBoundary extends Component<{children:ReactNode;label:string},{failed:boolean}> {
   state={failed:false};
   static getDerivedStateFromError(){return {failed:true};}
@@ -33,16 +35,56 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
   const [zoomIndex,setZoomIndex]=useState(2);
   const [sensorOpen,setSensorOpen]=useState(true);
   const [telemetry,setTelemetry]=useState<SensorTelemetry|null>(null);
+  const [audioOn,setAudioOn]=useState(()=>{try{return localStorage.getItem('aeron-audio')!=='off';}catch{return true;}});
+  const sceneRef=useRef<HTMLDivElement>(null);
   const updateBearing=useCallback((value:number)=>setBearing(value),[]);
   // A new scenario has new tracks: drop the previous cue so the sensor returns to standby.
   useEffect(()=>{setTrack(0);setSensorCue(false);setTelemetry(null);},[scenario]);
   const metresPerUnit=world==='earth'?8:1;
+  const toggleAudio=useCallback(()=>setAudioOn(on=>{try{localStorage.setItem('aeron-audio',on?'off':'on');}catch{/* preference only */}return !on;}),[]);
+  const toggleFullscreen=useCallback(()=>{if(document.fullscreenElement)void document.exitFullscreen();else void sceneRef.current?.requestFullscreen().catch(()=>onNotice?.('Fullscreen is unavailable in this preview.'));},[onNotice]);
+  // Rotor sound from the listener at the radar observer. It plays only while the exercise or replay
+  // clock is advancing, so hold, preview and a paused replay are silent. Kites are effectively silent.
+  useEffect(()=>{
+    if(!audioOn||scenario.category==='Bird'||(phase!=='running'&&phase!=='replay'))return;
+    const audio=new RotorAudio();let frame=0,last=-1;
+    const tick=()=>{
+      const t=time.current,advancing=t!==last;last=t;
+      if(!advancing||document.hidden)audio.silence();
+      else{
+        let nearest=Infinity,pitch=190;const levels:number[]=[];
+        for(const {id} of visibleContacts(scenario,t)){
+          const k=contactKinematics(scenario,t,id),[x,y,z]=k.position;
+          const range=Math.hypot(x*metresPerUnit,y*metresPerUnit-1.6,(z-12)*metresPerUnit);
+          levels.push(rotorLevel(range));
+          if(range<nearest){nearest=range;pitch=bladePass(k.speed,k.forwardAccel);}
+        }
+        audio.update(combinedLevel(levels),pitch);
+      }
+      frame=requestAnimationFrame(tick);
+    };
+    frame=requestAnimationFrame(tick);
+    return()=>{cancelAnimationFrame(frame);audio.dispose();};
+  },[audioOn,scenario,phase,metresPerUnit,time]);
+  useEffect(()=>{
+    const key=(event:KeyboardEvent)=>{
+      const element=event.target as HTMLElement;
+      if(element.closest('input,select,textarea')||event.altKey||event.ctrlKey||event.metaKey||event.repeat)return;
+      if(document.querySelector('[aria-modal="true"]'))return;
+      const k=event.key.toLowerCase();
+      if(k==='t'&&displayTime>=scenario.arrival){setTrack(t=>(Math.min(t,scenario.count-1)+1)%scenario.count);setSensorCue(true);setSensorOpen(true);}
+      if(k==='i'){setSensorMode(m=>m==='eo'?'ir':'eo');setSensorOpen(true);}
+      if(k==='f')toggleFullscreen();
+      if(k==='m')toggleAudio();
+    };
+    window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
+  },[displayTime,scenario,toggleAudio,toggleFullscreen]);
   const sensorActive=(selected||sensorCue)&&displayTime>=scenario.arrival;
   const views: {id:CameraView;label:string}[]=[{id:'overview',label:'Overview'},{id:'rooftop',label:'Rooftop'},{id:'street',label:'Street'}];
   const stateLabel=phase==='running'?'LIVE':phase==='paused'?'HOLD':phase==='replay'?'REPLAY':'PREVIEW';
   const radar=<Radar scenario={scenario} time={displayTime} selected={selected} paused={phase==='paused'||phase==='preview'} preview={phase==='preview'} replay={phase==='replay'} bearing={bearing} metresPerUnit={metresPerUnit} track={track} assessment={assessment} onTrack={id=>{setTrack(id);setSensorCue(true);setSensorOpen(true);}} onSelect={onSelect}/>;
   const trackLabel=`T${(Math.min(track,scenario.count-1)+1).toString().padStart(2,'0')}`;
-  return <div className={`scene ${phase==='replay'?'replay-scene':''} world-${world}`}>
+  return <div ref={sceneRef} className={`scene ${phase==='replay'?'replay-scene':''} world-${world}`}>
     <SceneBoundary label="3D view"><Suspense fallback={<div className="canvas-error"><span className="loader"/>Preparing the scene…</div>}>{world==='earth'?<EarthScene scenario={scenario} time={time} selected={selected} onSelect={onSelect} cameraView={cameraView} onBearingChange={updateBearing} highQuality={quality==='high'} onStatus={setEarthStatus}/>:<Canvas shadows camera={{position:[28,22,42],fov:44,near:.2,far:600}} dpr={quality==='high'?[1,2]:[1,1.25]} gl={{antialias:true,toneMappingExposure:.9}}><DelhiScene scenario={scenario} time={time} selected={selected} onSelect={onSelect} cameraView={cameraView} onBearingChange={updateBearing} highQuality={quality==='high'}/></Canvas>}</Suspense></SceneBoundary>
     <div className="scene-vignette" aria-hidden/>
     <div className="scene-hud-top">
@@ -54,13 +96,14 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
       <HeadingTape bearing={bearing}/>
       <div className="scene-tools">
         <div className="world-switch segmented-dark" role="group" aria-label="Environment"><button aria-pressed={world==='training'} onClick={()=>setWorld('training')}>3D district</button><button aria-pressed={world==='earth'} onClick={()=>setWorld('earth')}>Satellite</button></div>
-        <button className="icon-button" title="Expand scene" aria-label="Expand scene" onClick={e=>{const element=e.currentTarget.closest('.scene');if(document.fullscreenElement)void document.exitFullscreen();else void element?.requestFullscreen().catch(()=>onNotice?.('Fullscreen is unavailable in this preview.'));}}><Maximize2 size={15}/></button>
+        <button className="icon-button" title={scenario.category==='Bird'?'Rotor audio (kites are silent at range)':audioOn?'Mute rotor audio (M)':'Unmute rotor audio (M)'} aria-label={audioOn?'Mute rotor audio':'Unmute rotor audio'} aria-pressed={!audioOn} onClick={toggleAudio}>{audioOn?<Volume2 size={15}/>:<VolumeX size={15}/>}</button>
+        <button className="icon-button" title="Fullscreen (F)" aria-label="Expand scene" onClick={toggleFullscreen}><Maximize2 size={15}/></button>
       </div>
     </div>
     <div className="camera-presets segmented-dark" role="group" aria-label="Camera position">{views.map(view=><button key={view.id} aria-pressed={cameraView===view.id} onClick={()=>onCameraChange(view.id)}>{view.label}</button>)}</div>
     <div className="reticle" aria-hidden><span/><span/><span/><span/></div>
     {sensorOpen?<section className={`eo-panel ${sensorActive?'eo-live':''} eo-${sensorMode}`} aria-label="Electro-optical sensor feed">
-      <header className="eo-head"><span className="eo-name">EO-1 <i>{sensorMode==='ir'?'LWIR · WHITE HOT':'DAY TV'}</i></span>
+      <header className="eo-head"><span className="eo-name">EO-1 <i>{sensorMode==='ir'?'IR · WHITE HOT':'DAY TV'}</i></span>
         <div className="eo-modes" role="group" aria-label="Sensor band"><button aria-pressed={sensorMode==='eo'} onClick={()=>setSensorMode('eo')}>EO</button><button aria-pressed={sensorMode==='ir'} onClick={()=>setSensorMode('ir')}>IR</button></div>
         <button className="eo-close" aria-label="Hide sensor feed" title="Hide sensor feed" onClick={()=>setSensorOpen(false)}><VideoOff size={13}/></button></header>
       <div className="eo-view">

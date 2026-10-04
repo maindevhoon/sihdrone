@@ -9,6 +9,7 @@ const cues: { category: Category; title: string; points: string[] }[] = [
     'Rigid airframe; no wingbeat. Speed changes show as body tilt.',
     'Smooth, deliberate legs; can slow, hover or reverse.',
     'Red/green navigation lights and a white strobe, most obvious at dusk.',
+    'A steady rotor hum that rises in pitch as it manoeuvres.',
     'IR: motors and battery are the hottest points.',
   ] },
   { category: 'Drone group', title: 'Coordinated UAS', points: [
@@ -20,6 +21,7 @@ const cues: { category: Category; title: string; points: string[] }[] = [
     'Long angled wings with fingered tips; shallow forked tail.',
     'Long glides on steady wings, with short bursts of slow flapping.',
     'Banks steeply into turns; tail twists to steer. No lights.',
+    'No motor hum; a kite is effectively silent at these ranges.',
     'IR: the whole body is warm, without motor hot spots.',
   ] },
 ];
