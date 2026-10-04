@@ -9,7 +9,7 @@ const steps = [
 ];
 const shortcuts: [string, string][] = [
   ['Space', 'Start, hold or resume'], ['O', 'Mark observation'], ['1 · 2 · 3', 'Single drone · Drone group · Bird'],
-  ['T', 'Next radar track (slews EO/IR)'], ['I', 'Toggle EO / IR'], ['F', 'Fullscreen sensor view'], ['M', 'Mute rotor audio'], ['?', 'This help'],
+  ['T', 'Next radar track (slews EO/IR)'], ['I', 'Toggle EO / IR feed'], ['H', 'Thermal sensor view'], ['F', 'Fullscreen sensor view'], ['M', 'Mute rotor audio'], ['?', 'This help'],
 ];
 
 export default function HelpDialog({ welcome, onClose }: { welcome: boolean; onClose: () => void }) {

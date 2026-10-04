@@ -1,6 +1,7 @@
 // Aeron service worker: offline shell and cached build assets. Bump VERSION when this logic changes.
-const VERSION = 'aeron-v1';
-const SHELL = ['/', '/favicon.svg', '/manifest.webmanifest', '/models/drone.glb', '/models/bird.glb'];
+const VERSION = 'aeron-v2';
+const SHELL = ['/', '/favicon.svg', '/manifest.webmanifest', '/models/bird.glb',
+  ...['mavic-3', 'phantom-4-pro', 'matrice-350-rtk', 'mini-4-pro'].map(id => `/models/drone-${id}.glb`)];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(VERSION).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });

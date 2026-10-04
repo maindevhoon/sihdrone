@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { Category, Difficulty } from './simulation';
+import { AIRFRAMES } from './airframes';
 
 // Visual cues that separate the three categories in this simulation. They describe what the
 // models and motion here actually do, so the guide stays consistent with the scene.
@@ -37,6 +38,13 @@ export default function RecognitionGuide({ difficulty }: { difficulty: Difficult
     {expanded && <div className="guide-cards">{cues.map(cue => <div key={cue.category} className="guide-card">
       <div className="guide-title"><strong>{cue.category}</strong><span>{cue.title}</span></div>
       <ul>{cue.points.map(point => <li key={point}>{point}</li>)}</ul>
-    </div>)}</div>}
+    </div>)}
+      <div className="guide-card size-card">
+        <div className="guide-title"><strong>Size reference</strong><span>Published figures</span></div>
+        <table><tbody>{Object.values(AIRFRAMES).map(a => <tr key={a.id}><th scope="row">{a.name.replace('DJI ', '')}</th><td>{a.published[0].value}</td><td>{a.published.find(p => /weight/i.test(p.label))?.value}</td></tr>)}
+          <tr><th scope="row">Black kite</th><td>≈ 150 cm span</td><td>≈ 735 g</td></tr></tbody></table>
+        <p>Small UAS are roughly 0.3–1.4 m tip to tip; a kite spans about 1.5 m. Compare with the EO feed's SPAN estimate.</p>
+      </div>
+    </div>}
   </section>;
 }

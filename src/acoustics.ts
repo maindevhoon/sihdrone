@@ -8,8 +8,11 @@ export function rotorLevel(range: number) {
 }
 /** Combined loudness of several airframes (energy sum), capped at 1. */
 export const combinedLevel = (levels: number[]) => Math.min(1, Math.sqrt(levels.reduce((sum, level) => sum + level*level, 0)));
-/** Blade-pass fundamental in Hz: about 200 Hz in hover, rising as the motors work harder. */
-export const bladePass = (speed: number, forwardAccel: number) => 190 + Math.min(70, speed*6 + Math.max(0, forwardAccel)*4);
+/**
+ * Blade-pass fundamental in Hz: the airframe's hover tone (larger propellers turn slower and sound
+ * lower), rising by up to about a third as the motors work harder.
+ */
+export const bladePass = (hoverHz: number, speed: number, forwardAccel: number) => hoverHz*(1 + Math.min(.35, (speed*6 + Math.max(0, forwardAccel)*4)/200));
 
 export class RotorAudio {
   private context: AudioContext | null = null;

@@ -62,5 +62,6 @@ test('rotor audio fades with range, sums energy across airframes and rises in pi
   assert.ok(rotorLevel(30)>rotorLevel(240)&&rotorLevel(240)>0);
   assert.equal(rotorLevel(400),0);assert.equal(rotorLevel(NaN),0);
   assert.ok(combinedLevel([.5,.5])>.5&&combinedLevel([1,1])===1);
-  assert.equal(bladePass(0,0),190);assert.ok(bladePass(4,1)>bladePass(1,0));assert.ok(bladePass(100,100)<=260);
+  assert.equal(bladePass(200,0,0),200);assert.ok(bladePass(200,4,1)>bladePass(200,1,0));assert.ok(bladePass(200,100,100)<=270);
+  assert.ok(bladePass(110,2,0)<bladePass(330,2,0));
 });

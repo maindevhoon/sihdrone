@@ -38,6 +38,7 @@ node --import tsx scripts/create-contact-models.mjs
 | --- | --- |
 | `src/App.tsx` | Console layout, exercise clock, session transitions, observation/classification, keyboard controls |
 | `src/simulation.ts` | Scenario types, seeded generation, contact positions, scoring, recommendations |
+| `src/airframes.ts` | Published airframe specifications and the seed-based airframe choice; `airframes.test.ts` checks models against them |
 | `src/kinematics.ts` | Velocity, heading, attitude, wingbeat and strobe timing derived from `contactPosition` |
 | `src/contactGeometry.ts` | Real-size drone/kite builders and pose/animation shared by the scene, sensor feed and GLB export |
 | `src/ContactModel.tsx` | R3F wrapper that places a contact model on the shared trajectory |
@@ -78,6 +79,8 @@ node --import tsx scripts/create-contact-models.mjs
 - Preserve the local training scene and the Earth view. Keep heavy renderer code lazy-loaded, bound resource usage, and dispose of WebGL resources, controls, event handlers, and textures when appropriate. Check lifecycle changes under React StrictMode.
 - The simulation uses `[x, y, z]`, with `y` as altitude. Radar uses an observer at `[0, 0, 12]`. Earth mode maps each training unit to eight metres; the local scene uses one. Keep projection, range rings, trails, and numeric readouts consistent with the selected scale.
 - Radar heading-up mode rotates the projection using camera heading. Preserve range when rotating, count out-of-range contacts accurately, and never clamp them to misleading positions on the scope.
+- Airframe dimensions must stay within 2% of the published envelope in `airframes.ts`; cite the source when adding an airframe and only display published figures. Regenerate the GLBs after geometry changes.
+- Thermal views are display approximations; do not describe them as radiometric or validated sensor output.
 - Radar contact inspection may record an observation during a live exercise, but preview and replay interactions must not alter exercise results. Radar track identity reflects the operator's classification, never the scenario category.
 - Keep the cockpit-inspired display legible and its controls usable at narrow widths. Check that radar, camera presets, attribution, and bottom controls do not overlap.
 - Earth view without credentials shows satellite photography on an ellipsoid. Do not label it as photorealistic 3D buildings or surveyed terrain. Google 3D coverage has not been verified for Delhi with an authenticated account.

@@ -105,7 +105,7 @@ kbd{font-family:var(--mono);font-size:10px;line-height:1;color:var(--text-2);bac
 .scene-hud-top button,.scene-hud-top select{pointer-events:auto}
 .scene-id{display:flex;flex-direction:column;gap:6px;min-width:0}
 .scene-state,.scene-coordinate,.earth-source,.heading-tape,.segmented-dark,.icon-button,.scene-bottom>*,.eo-panel,.eo-show{background:#0a1016c7;border:1px solid #ffffff1a;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:6px}
-.scene-state{display:flex;align-items:center;gap:8px;align-self:flex-start;padding:6px 10px;font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:1.2px;color:#dfe7ee}
+.scene-state{display:flex;align-items:center;gap:8px;white-space:nowrap;align-self:flex-start;padding:6px 10px;font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:1.2px;color:#dfe7ee}
 .scene-state i{width:1px;height:10px;background:#ffffff2a}
 .scene-state.state-live{color:var(--ok)}.scene-state.state-live .state-dot{background:var(--ok);box-shadow:0 0 8px var(--ok);animation:blink 1.4s ease-in-out infinite}
 .scene-state.state-hold{color:var(--warn)}.scene-state.state-hold .state-dot{background:var(--warn)}
@@ -522,3 +522,32 @@ kbd{font-family:var(--mono);font-size:10px;line-height:1;color:var(--text-2);bac
   .profile-fields input{border:0;padding:0;background:none}
 }
 @media (max-width:480px){.brand-name,.topbar .state-pill{display:none}.topbar{gap:10px}.topbar-status{gap:8px}}
+
+/* Thermal (LWIR) display. The scene renders apparent temperature in grey; palettes are display filters. */
+.filter-defs{position:absolute;width:0;height:0;overflow:hidden}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.main-view{position:absolute;inset:0}
+.main-view.thermal canvas,.eo-ir.palette-white .eo-view canvas{filter:grayscale(1) contrast(1.18) blur(.3px)}
+.main-view.thermal.palette-black canvas,.eo-ir.palette-black .eo-view canvas{filter:grayscale(1) contrast(1.18) invert(1) blur(.3px)}
+.main-view.thermal.palette-iron canvas,.eo-ir.palette-iron .eo-view canvas{filter:grayscale(1) contrast(1.2) url(#thermal-iron) blur(.3px)}
+.main-view.thermal::after{content:'';position:absolute;inset:0;pointer-events:none;opacity:.1;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
+.view-modes{position:absolute;top:100px;right:12px;z-index:3;display:flex;align-items:center;gap:6px}
+.palette-control select{width:auto;font-size:11.5px;padding:6px 26px 6px 9px;color:#dce6ee;background-color:#0a1016c7;background-position:right 8px center;border-color:#ffffff1a;backdrop-filter:blur(8px)}
+.segmented-dark button:disabled{opacity:.4}
+.replay-scene .view-modes{top:56px}
+@media (max-width:640px){.view-modes{top:86px;right:auto;left:8px}.replay-scene .view-modes{top:86px}}
+.airframe-ref{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:6px 20px;margin-top:10px;padding:14px 16px;background:var(--bg-2);border:1px solid var(--line);border-radius:8px}
+.airframe-ref>div{display:flex;flex-direction:column;gap:4px}
+.airframe-ref strong{font-size:15px;font-weight:600}
+.airframe-ref>div>span:last-child{font-size:12px;color:var(--muted)}
+.airframe-ref dl{margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.airframe-ref dt{font-family:var(--mono);font-size:9.5px;letter-spacing:.8px;color:var(--dim);text-transform:uppercase}
+.airframe-ref dd{margin:2px 0 0;font-family:var(--mono);font-size:13px;color:var(--text)}
+.airframe-ref small{grid-column:1/-1;font-size:11px;color:var(--dim)}
+.size-card table{width:100%;border-collapse:collapse;font-size:11.5px}
+.size-card th{text-align:left;font-weight:500;color:var(--text-2);padding:4px 6px 4px 0;white-space:nowrap}
+.size-card td{font-family:var(--mono);font-size:10.5px;color:var(--muted);padding:4px 0 4px 6px;border-top:1px solid var(--line)}
+.size-card th{border-top:1px solid var(--line)}
+.size-card tr:first-child th,.size-card tr:first-child td{border-top:0}
+.size-card p{font-size:11.5px;color:var(--dim);margin-top:6px}
+@media (max-width:640px){.airframe-ref{grid-template-columns:1fr}}

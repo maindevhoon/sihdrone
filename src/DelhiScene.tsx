@@ -1,13 +1,54 @@
 import { memo, useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html, OrbitControls, RoundedBox, Sky } from '@react-three/drei';
-import { CanvasTexture, Group, RepeatWrapping, Shape, SRGBColorSpace, Vector3 } from 'three';
+import { CanvasTexture, Color, Group, MeshLambertMaterial, RepeatWrapping, Shape, SRGBColorSpace, Vector3, type Material, type Mesh, type MeshStandardMaterial, type Object3D } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { useThree } from '@react-three/fiber';
 import type { Scenario, CameraView } from './simulation';
 import ContactModel from './ContactModel';
 
-type SceneProps = { scenario: Scenario; time: MutableRefObject<number>; selected: boolean; onSelect: () => void; cameraView: CameraView; onBearingChange:(bearing:number)=>void; highQuality:boolean };
+type SceneProps = { scenario: Scenario; time: MutableRefObject<number>; selected: boolean; onSelect: () => void; cameraView: CameraView; onBearingChange:(bearing:number)=>void; highQuality:boolean; thermal?:boolean };
+/**
+ * Apparent temperature (0 cold – 1 hot) of a district surface for the long-wave IR view: emitters
+ * are hottest, sun-loaded dark surfaces (asphalt, tyres) warm, vegetation and glass cool.
+ */
+function surfaceHeat(material: Material, dusk: boolean) {
+  const m = material as MeshStandardMaterial;
+  if (m.emissive && m.emissiveIntensity > .3 && m.emissive.r + m.emissive.g + m.emissive.b > .3) return .95;
+  if (!m.color) return .05;
+  const hsl = {h: 0, s: 0, l: 0}; m.color.getHSL(hsl, SRGBColorSpace);
+  if (m.transparent && m.opacity < .9) return .22;
+  const heat = hsl.h > .17 && hsl.h < .45 && hsl.s > .1 ? .3 : .36 + (1 - hsl.l)*.42;
+  // After sunset surfaces cool towards the air temperature; masonry keeps some stored heat.
+  return dusk ? .22 + (heat - .22)*.8 : heat;
+}
+/** Swaps district materials for heat-shaded ones while thermal is on; contacts carry their own palette. */
+function ThermalLook({ enabled, dusk }: { enabled: boolean; dusk: boolean }) {
+  const scene = useThree(state => state.scene);
+  useEffect(() => {
+    if (!enabled) return;
+    const originals = new Map<Mesh, Material | Material[]>(), made = new Map<Material, Material>();
+    const swap = (material: Material) => {
+      let thermal = made.get(material);
+      if (!thermal) {
+        const h = surfaceHeat(material, dusk), level = new Color().setRGB(h, h, h, SRGBColorSpace);
+        // Lit faces read warmer than shaded ones, as solar loading does in real LWIR imagery.
+        thermal = new MeshLambertMaterial({ color: level.clone().multiplyScalar(.45), emissive: level.clone().multiplyScalar(.62), transparent: material.transparent, opacity: material.opacity, side: material.side });
+        made.set(material, thermal);
+      }
+      return thermal;
+    };
+    const walk = (object: Object3D) => {
+      if (object.userData.contact) return;
+      const mesh = object as Mesh;
+      if (mesh.isMesh) { originals.set(mesh, mesh.material); mesh.material = Array.isArray(mesh.material) ? mesh.material.map(swap) : swap(mesh.material); }
+      object.children.forEach(walk);
+    };
+    walk(scene);
+    return () => { originals.forEach((material, mesh) => { mesh.material = material; }); made.forEach(material => material.dispose()); };
+  }, [scene, enabled, dusk]);
+  return null;
+}
 function surfaceTexture(kind: 'stone' | 'road' | 'grass' | 'facade', dusk = false) {
   const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
   const ctx = canvas.getContext('2d')!;
@@ -114,16 +155,17 @@ function Metro({time}: {time:MutableRefObject<number>}) {
     </group>)}</group>
   </group>;
 }
-export default memo(function DelhiScene({scenario,time,selected,onSelect,cameraView,onBearingChange,highQuality}: SceneProps) {
+export default memo(function DelhiScene({scenario,time,selected,onSelect,cameraView,onBearingChange,highQuality,thermal=false}: SceneProps) {
   const dusk=scenario.dusk;
   const textures=useMemo(()=>({stone:surfaceTexture('stone'),road:surfaceTexture('road'),grass:surfaceTexture('grass'),facade:surfaceTexture('facade',dusk)}),[dusk]);
   useEffect(()=>()=>{Object.values(textures).forEach(texture=>texture.dispose());},[textures]);
   const buildings=useMemo(()=>Array.from({length:26},(_,i)=>({x:(i%2?1:-1)*(19+(Math.floor(i/2)%3)*13),z:-Math.floor(i/6)*19-8,width:8+i%3*1.4,height:5+i%4*2.3,depth:8+i%2*2,index:i})),[]);
   const roadPaint='#d3d2bb';
   return <>
-    <color attach="background" args={[dusk?'#8c8b98':'#c8c8be']}/>
-    <fog attach="fog" args={[dusk?'#8c8b98':'#d4ceb9',scenario.difficulty==='challenge'?30:65,scenario.difficulty==='challenge'?130:205]}/>
-    <Sky distance={450000} sunPosition={dusk?[-70,3,-80]:[-60,22,-90]} turbidity={dusk?9:4.5} rayleigh={dusk?1.2:1.9} mieCoefficient={.006} mieDirectionalG={.82}/>
+    {/* In LWIR the clear sky is the coldest thing in view and haze converges on a mid grey. */}
+    <color attach="background" args={[thermal?'#101010':dusk?'#8c8b98':'#c8c8be']}/>
+    <fog attach="fog" args={[thermal?'#3a3a3a':dusk?'#8c8b98':'#d4ceb9',scenario.difficulty==='challenge'?30:65,scenario.difficulty==='challenge'?130:205]}/>
+    {!thermal&&<Sky distance={450000} sunPosition={dusk?[-70,3,-80]:[-60,22,-90]} turbidity={dusk?9:4.5} rayleigh={dusk?1.2:1.9} mieCoefficient={.006} mieDirectionalG={.82}/>}
     <hemisphereLight args={['#d4deeb','#8e7e62',dusk?1.2:1.8]}/>
     <directionalLight position={[-35,35,5]} intensity={dusk?2:3.2} color={dusk?'#ffbf83':'#fff0d3'} castShadow shadow-mapSize={highQuality?[2048,2048]:[1024,1024]} shadow-camera-left={-70} shadow-camera-right={70} shadow-camera-top={70} shadow-camera-bottom={-70} shadow-camera-far={160} shadow-normalBias={.08}/>
     <mesh rotation={[-Math.PI/2,0,0]} position={[0,-.03,0]} receiveShadow><planeGeometry args={[400,400]}/><meshStandardMaterial map={textures.grass} bumpMap={textures.grass} bumpScale={.07} roughness={1}/></mesh>
@@ -149,10 +191,11 @@ export default memo(function DelhiScene({scenario,time,selected,onSelect,cameraV
     {Array.from({length:24},(_,i)=><Tree key={i} x={(i%2?1:-1)*(11.5+(i%3)*.7)} z={25-Math.floor(i/2)*9} scale={.65+(i%3)*.1}/>)}
     {Array.from({length:14},(_,i)=><Tree key={`park${i}`} x={(i%2?1:-1)*(37+i%3*7)} z={26-Math.floor(i/2)*11} scale={1.1}/>)}
     {[0,1,2,3,4,5,6,7].map(i=><Car key={i} lane={i%2?3.4:-3.4} start={i*18+5} variant={i===6?'bus':i===7?'rickshaw':'car'} color={['#e4dfd0','#b7c8c8','#b97553','#ede9df','#739288','#d4caaa','#bf5950','#4b9661'][i]} time={time}/>)}
-    {Array.from({length:scenario.count},(_,index)=><ContactModel key={index} index={index} scenario={scenario} time={time} onSelect={onSelect}>
+    {Array.from({length:scenario.count},(_,index)=><ContactModel key={index} index={index} scenario={scenario} time={time} onSelect={onSelect} palette={thermal?'thermal':'visible'}>
       {/* After an observation the sensor overlays a track gate, as an EO tracker would. */}
       {selected&&<Html center zIndexRange={[2,0]} style={{pointerEvents:'none'}}><div className="track-gate"><span>T{(index+1).toString().padStart(2,'0')}</span></div></Html>}
     </ContactModel>)}
     <CameraRig view={cameraView} onBearingChange={onBearingChange}/>
+    <ThermalLook enabled={thermal} dusk={dusk}/>
   </>;
 });
