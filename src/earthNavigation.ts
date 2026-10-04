@@ -5,9 +5,10 @@ import {
 } from 'cesium';
 import {
   clamp, MAX_EARTH_RANGE, MIN_EARTH_RANGE, MAX_EARTH_PITCH, MIN_EARTH_PITCH,
-  orbitAngles, safariGestureDelta, wheelIntent, zoomRange,
+  orbitAngles, safariGestureDelta, wheelIntent,
   type NavigationInput, type NavigationIntent,
 } from './earthNavigationMath';
+import { limitTerrainMotion, zoomDestination } from './earthNavigationTerrain';
 
 type Orbit={target:Cartesian3;heading:number;pitch:number;range:number};
 type SafariGesture=Event & {scale:number;rotation:number};
@@ -15,7 +16,7 @@ export type EarthNavigation={zoom:(logScale:number)=>void;north:()=>void;topDown
 
 /** Adds trackpad input without replacing Cesium's mouse-drag and touch controls. */
 export function attachEarthNavigation(viewer:Viewer,options:{
-  input:()=>NavigationInput;groundHeight:()=>number;fallbackTarget:()=>Cartesian3;
+  input:()=>NavigationInput;fallbackTarget:()=>Cartesian3;
   onInteraction:()=>void;onChange:()=>void;
 }):EarthNavigation {
   const {camera,scene}=viewer,canvas=scene.canvas;
@@ -37,6 +38,22 @@ export function attachEarthNavigation(viewer:Viewer,options:{
   const queue:{intent:NavigationIntent;point?:Cartesian2}[]=[];
 
   function centre(){return new Cartesian2(canvas.clientWidth/2,canvas.clientHeight/2);}
+  function surfaceHeight(position:Cartographic) {
+    if(scene.globe.show)return scene.globe.getHeight(position);
+    // Exclude synthetic contacts and our site marker from tile-surface height queries.
+    return scene.sampleHeightSupported?scene.sampleHeight(position,viewer.entities.values):undefined;
+  }
+  function surfacePoint(point:Cartesian2) {
+    if(scene.globe.show){
+      const ray=camera.getPickRay(point);
+      return ray?scene.globe.pick(ray,scene):undefined;
+    }
+    // The hidden ellipsoid must not override an authenticated 3D-tile surface.
+    if(!scene.pickPositionSupported)return undefined;
+    const hit=scene.pick(point);
+    if(hit?.id && viewer.entities.contains(hit.id))return undefined;
+    return scene.pickPosition(point);
+  }
   function planePoint(point:Cartesian2,target:Cartesian3) {
     const ray=camera.getPickRay(point);
     if(!ray)return undefined;
@@ -46,11 +63,7 @@ export function attachEarthNavigation(viewer:Viewer,options:{
   function readOrbit():Orbit {
     const point=centre();
     // Pick geographic ground, not the animated contact at the reticle.
-    const ray=camera.getPickRay(point);
-    const ground=ray?scene.globe.pick(ray,scene):undefined;
-    const picked=ground||camera.pickEllipsoid(point,Ellipsoid.WGS84);
-    let target=options.fallbackTarget();
-    if(picked){const c=Cartographic.fromCartesian(picked);target=Cartesian3.fromRadians(c.longitude,c.latitude,options.groundHeight());}
+    const target=surfacePoint(point)??fallbackPoint(point);
     const transform=Transforms.eastNorthUpToFixedFrame(target);
     const local=Matrix4.multiplyByPoint(Matrix4.inverseTransformation(transform,new Matrix4()),camera.positionWC,new Cartesian3());
     const distance=Cartesian3.magnitude(local);
@@ -59,15 +72,38 @@ export function attachEarthNavigation(viewer:Viewer,options:{
       pitch:clamp(-Math.asin(clamp(local.z/Math.max(distance,1),-1,1)),MIN_EARTH_PITCH,MAX_EARTH_PITCH)};
   }
   function apply(orbit:Orbit) {
+    const before=Cartesian3.clone(camera.positionWC);
     camera.lookAt(orbit.target,new HeadingPitchRange(orbit.heading,orbit.pitch,orbit.range));
     camera.lookAtTransform(Matrix4.IDENTITY);
+    const destination=limitTerrainMotion(before,camera.positionWC,surfaceHeight);
+    setPosition(destination);
+  }
+  function setPosition(destination:Cartesian3) {
+    const direction=Cartesian3.clone(camera.directionWC),up=Cartesian3.clone(camera.upWC);
+    camera.setView({destination,orientation:{direction,up}});
     scene.requestRender();options.onChange();
+  }
+  function fallbackPoint(point:Cartesian2) {
+    // A sky/horizon miss must not pull zoom back to the selected theatre site.
+    const position=camera.positionCartographic;
+    const ground=Cartesian3.fromRadians(position.longitude,position.latitude,surfaceHeight(position)??0);
+    const plane=planePoint(point,ground);
+    if(plane && Cartesian3.distance(camera.positionWC,plane)<=MAX_EARTH_RANGE)return plane;
+    const range=clamp(Cartesian3.distance(camera.positionWC,options.fallbackTarget()),MIN_EARTH_RANGE,MAX_EARTH_RANGE);
+    return Cartesian3.add(camera.positionWC,Cartesian3.multiplyByScalar(camera.directionWC,range,new Cartesian3()),new Cartesian3());
   }
   function moveTarget(target:Cartesian3,offset:Cartesian3) {
     const moved=Cartographic.fromCartesian(Cartesian3.add(target,offset,new Cartesian3()));
-    return Cartesian3.fromRadians(moved.longitude,moved.latitude,options.groundHeight());
+    return Cartesian3.fromRadians(moved.longitude,moved.latitude,surfaceHeight(moved)??Cartographic.fromCartesian(target).height);
   }
   function perform(intent:NavigationIntent,point?:Cartesian2) {
+    if(intent.kind==='zoom'){
+      const middle=centre();
+      const target=(point?surfacePoint(point):undefined)??surfacePoint(middle)??fallbackPoint(middle);
+      const destination=zoomDestination(camera.positionWC,target,intent.logScale);
+      setPosition(limitTerrainMotion(camera.positionWC,destination,surfaceHeight));
+      return;
+    }
     const orbit=readOrbit();
     if(intent.kind==='pan'){
       const middle=centre(),from=planePoint(middle,orbit.target);
@@ -78,14 +114,8 @@ export function attachEarthNavigation(viewer:Viewer,options:{
       const length=Cartesian3.magnitude(offset),limit=orbit.range*.2;
       if(length>limit)Cartesian3.multiplyByScalar(offset,limit/length,offset);
       orbit.target=moveTarget(orbit.target,offset);apply(orbit);
-    } else if(intent.kind==='orbit'){
-      Object.assign(orbit,orbitAngles(orbit.heading,orbit.pitch,intent.x,intent.y));apply(orbit);
     } else {
-      const anchor=point?planePoint(point,orbit.target):undefined;
-      orbit.range=zoomRange(orbit.range,intent.logScale);apply(orbit);
-      // Keep the ground below the pointer anchored while pinching.
-      const after=point&&anchor?planePoint(point,orbit.target):undefined;
-      if(anchor&&after){orbit.target=moveTarget(orbit.target,Cartesian3.subtract(anchor,after,new Cartesian3()));apply(orbit);}
+      Object.assign(orbit,orbitAngles(orbit.heading,orbit.pitch,intent.x,intent.y));apply(orbit);
     }
   }
   function schedule(intent:NavigationIntent,point?:Cartesian2) {
@@ -117,7 +147,12 @@ export function attachEarthNavigation(viewer:Viewer,options:{
     const delta=safariGestureDelta(safariPrevious,next);
     if(!delta)return;
     safariPrevious=next;
-    if(delta.logScale)schedule({kind:'zoom',logScale:delta.logScale});
+    if(delta.logScale){
+      const location=event as Event & {clientX?:number;clientY?:number};
+      const point=Number.isFinite(location.clientX)&&Number.isFinite(location.clientY)
+        ?localPoint(location as {clientX:number;clientY:number}):undefined;
+      schedule({kind:'zoom',logScale:delta.logScale},point);
+    }
     if(delta.rotation)schedule({kind:'orbit',x:delta.rotation*Math.PI/180/.004,y:0});
   };
   const gestureEnd=(event:Event)=>{
