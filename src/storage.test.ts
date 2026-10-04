@@ -21,3 +21,8 @@ test('trainee profile is trimmed, bounded and tolerant of malformed storage',()=
   assert.deepEqual(readProfile(),{name:'Cadet A. Sharma',unit:'x'.repeat(60)});
   for(const value of ['{broken','null','[1]','{"name":4}']){storage.setItem(PROFILE_KEY,value);assert.deepEqual(readProfile(),{name:'',unit:''});}
 });
+test('the optional theatre is kept when known, rejected when unknown, and not required',()=>{
+  const recorded={...session(1),theatre:'tololing' as const},legacy=session(2),bogus={...session(3),theatre:'atlantis'};
+  storage.setItem(STORAGE_KEY,JSON.stringify([recorded,legacy,bogus]));
+  assert.deepEqual(readSessions(),[recorded,legacy]);
+});

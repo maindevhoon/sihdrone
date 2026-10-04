@@ -1,3 +1,4 @@
+import type { TheatreId } from './theatres';
 export type Category = 'Single drone' | 'Drone group' | 'Bird';
 export type Difficulty = 'guided' | 'challenge';
 export type ExerciseId = 'skyline' | 'passing' | 'mixed';
@@ -6,7 +7,9 @@ export type Position = [number, number, number];
 export type FlightPattern = 'orbit' | 'crossing' | 'figure-eight' | 'weave' | 'approach';
 export type Scenario = { version: 1 | 2; pattern?: FlightPattern; heading?: number; spread?: number; radius?: number; phase?: number; exercise: ExerciseId; seed: number; difficulty: Difficulty; dusk: boolean; duration: number; category: Category; count: number; arrival: number; speed: number; altitude: number; shift: number };
 export type SessionEvent = { time: number; type: 'start' | 'observation' | 'classification' | 'pause' | 'resume' | 'finish'; label: string };
-export type Session = { version: 1; id: string; createdAt: string; scenario: Scenario; duration: number; detection: number | null; answer: Category | ''; score: number; detectionScore: number; classificationScore: number; observationValid: boolean; events: SessionEvent[] };
+export type Session = { version: 1; id: string; createdAt: string; scenario: Scenario; duration: number; detection: number | null; answer: Category | ''; score: number; detectionScore: number; classificationScore: number; observationValid: boolean; events: SessionEvent[];
+  /** Theatre the exercise was flown in; absent on results saved before it was recorded. */
+  theatre?: TheatreId };
 export const categories: Category[] = ['Single drone', 'Drone group', 'Bird'];
 export const exercises: { id: ExerciseId; title: string; description: string; short: string }[] = [
   { id: 'skyline', title: 'Eyes on the horizon', description: 'Observe the Delhi skyline. Identify the aerial objects as they enter the district.', short: 'Skyline watch' },

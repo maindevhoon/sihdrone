@@ -1,4 +1,5 @@
 import { categories, exercises, type Category, type Session } from './simulation';
+import { THEATRES, theatreById } from './theatres';
 
 // Training analytics computed from the stored session history. Pure functions, no storage.
 export type Answer = Category | 'None';
@@ -26,6 +27,11 @@ export function summarize(history: Session[]) {
     const sessions = history.filter(s => s.scenario.difficulty === difficulty && s.scenario.dusk === dusk);
     return { difficulty, dusk, sessions: sessions.length, meanScore: mean(sessions.map(s => s.score)), accuracy: sessions.length ? sessions.filter(isCorrect).length/sessions.length : null };
   }));
+  // Sessions saved before theatres were recorded are grouped as 'Not recorded'.
+  const byTheatre = THEATRES.map(t => ({ id: t.id as string, name: t.kind === 'synthetic' ? 'Training district' : t.name, list: history.filter(s => s.theatre === t.id) }))
+    .concat([{ id: 'unrecorded', name: 'Not recorded', list: history.filter(s => !s.theatre) }])
+    .filter(row => row.list.length)
+    .map(({ id, name, list }) => ({ id, name, sessions: list.length, meanScore: mean(list.map(s => s.score)), accuracy: list.filter(isCorrect).length/list.length }));
   const recent = ordered.slice(-5), recentMean = mean(recent.map(s => s.score));
   const correctPerCategory = categories.map(category => history.filter(s => s.scenario.category === category && isCorrect(s)).length);
   const strongChallenge = history.filter(s => s.scenario.difficulty === 'challenge' && s.score >= 70).length;
@@ -47,7 +53,7 @@ export function summarize(history: Session[]) {
     observationRate: history.length ? history.filter(s => s.observationValid).length/history.length : null,
     meanResponse: mean(times(history)),
     trend: ordered.map(s => ({ id: s.id, createdAt: s.createdAt, score: s.score, category: s.scenario.category, correct: isCorrect(s) })),
-    confusion, byCategory, byCondition, readiness: { level, criteria, met },
+    confusion, byCategory, byCondition, byTheatre, readiness: { level, criteria, met },
   };
 }
 export type Summary = ReturnType<typeof summarize>;
@@ -58,10 +64,10 @@ const csvCell = (value: string | number) => {
 };
 /** One row per session, oldest first, for instructors' spreadsheets. */
 export function historyCsv(history: Session[]) {
-  const header = ['Date (UTC)', 'Exercise', 'Difficulty', 'Lighting', 'Seed', 'Scenario version', 'Present', 'Answer', 'Time to observe (s)', 'Observation points', 'Classification points', 'Score'];
+  const header = ['Date (UTC)', 'Theatre', 'Exercise', 'Difficulty', 'Lighting', 'Seed', 'Scenario version', 'Present', 'Answer', 'Time to observe (s)', 'Observation points', 'Classification points', 'Score'];
   const rows = chronological(history).map(s => {
     const response = responseTime(s);
-    return [s.createdAt, exercises.find(e => e.id === s.scenario.exercise)?.short ?? s.scenario.exercise, s.scenario.difficulty, s.scenario.dusk ? 'Dusk' : 'Day', s.scenario.seed, s.scenario.version,
+    return [s.createdAt, s.theatre ? theatreById(s.theatre).name : '', exercises.find(e => e.id === s.scenario.exercise)?.short ?? s.scenario.exercise, s.scenario.difficulty, s.scenario.dusk ? 'Dusk' : 'Day', s.scenario.seed, s.scenario.version,
       s.scenario.category, s.answer || 'None', response === null ? '' : response.toFixed(2), s.detectionScore, s.classificationScore, s.score];
   });
   return [header, ...rows].map(row => row.map(csvCell).join(',')).join('\n');

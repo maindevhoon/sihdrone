@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Check, ChevronRight, Download, Eye, Flag, Focus, Layers, Pause, Play, Printer, RotateCcw, X } from 'lucide-react';
 import type { Profile } from './storage';
 import { airframeFor, BLACK_KITE } from './airframes';
-import type { Theatre, TheatreId } from './theatres';
+import { theatreById, type Theatre, type TheatreId } from './theatres';
 import { exercises, formatTime, recommendation, type CameraView, type Session } from './simulation';
 const SceneView=lazy(()=>import('./SceneView'));
 const noop=()=>{};
@@ -38,7 +38,7 @@ export default function Review({session,history,profile,theatre,onTheatreChange,
   return <div className="review-panel">
     <div className="review-heading"><span className="review-icon"><Flag size={24}/></span><div><div className="eyebrow">AFTER-ACTION REVIEW</div><h2>Debrief: {definition.short}</h2></div><span className="tag">{session.scenario.dusk?'DUSK':'DAYLIGHT'}</span></div>
     <div className="print-only print-meta">Trainee: {profile.name||'—'} · Unit/ID: {profile.unit||'—'} · Session {new Date(session.createdAt).toLocaleString()} · Printed {new Date().toLocaleString()}</div>
-    <div className="review-context"><span>{definition.short}</span><span>{session.scenario.difficulty==='guided'?'Guided':'Challenge'}</span><span>Variation {variationNumber(session.scenario.seed)?.toString().padStart(3,'0')??'saved'} · Seed {session.scenario.seed}</span></div>
+    <div className="review-context"><span>{definition.short}</span><span>{session.scenario.difficulty==='guided'?'Guided':'Challenge'}</span><span>Variation {variationNumber(session.scenario.seed)?.toString().padStart(3,'0')??'saved'} · Seed {session.scenario.seed}</span>{session.theatre&&<span>Theatre · {theatreById(session.theatre).kind==='synthetic'?'Training district':theatreById(session.theatre).name}</span>}</div>
     <div className="score-row"><div className="score-large">{session.score}<span>/ 100</span><p>Practice score</p></div><div className="score-summary"><h3>{correct?'Correctly classified.':!session.observationValid?'An observation to practice.':session.answer?'A closer look next time.':'Complete the classification.'}</h3><p>{correct?`You identified ${session.scenario.category.toLowerCase()}. Review your timing, or replay the encounter from another angle.`:!session.observationValid?'No valid observation was recorded after the objects entered the scene. Start with guided mode and watch the skyline.':`The encounter was ${session.scenario.category.toLowerCase()}. ${session.answer?`You selected ${session.answer.toLowerCase()}.`:'No category was submitted.'} Replay the scene to compare the objects and their movement.`}</p></div></div>
     <div className="review-metrics"><div><Eye size={19}/><span>Time after arrival</span><strong>{reaction===null?'Not recorded':`${reaction.toFixed(1)}s`}</strong></div><div>{correct?<Check size={19}/>:<X size={19}/>}<span>Classification</span><strong>{correct?'Correct':session.answer?'Incorrect':'Not submitted'}</strong></div><div><Layers size={19}/><span>Scene contained</span><strong>{session.scenario.category}</strong></div></div>
     <div className="airframe-ref"><div><span className="section-label">ENCOUNTER REFERENCE</span><strong>{session.scenario.count} × {airframe?airframe.name:BLACK_KITE.name}</strong><span>{airframe?airframe.role:'Raptor common over Delhi'}</span></div>

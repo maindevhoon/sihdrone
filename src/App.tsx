@@ -38,6 +38,7 @@ export default function App() {
   // The theatre is a view choice, not part of the scenario or the saved session, so it is remembered per browser.
   const [theatreId,setTheatreId]=useState<TheatreId>(()=>{try{return theatreById(localStorage.getItem('aeron-theatre')??'district').id;}catch{return 'district';}});
   const theatre=theatreById(theatreId);
+  const theatreRef=useRef(theatreId);theatreRef.current=theatreId;
   const changeTheatre=useCallback((id:TheatreId)=>{setTheatreId(id);try{localStorage.setItem('aeron-theatre',id);}catch{/* preference only */}},[]);
   const [profile,setProfile]=useState<Profile>(readProfile);
   // First visit opens the welcome guide; afterwards it is available from the help button or "?".
@@ -55,7 +56,7 @@ export default function App() {
     if(!['running','paused'].includes(phaseRef.current))return;
     const duration=Math.min(time.current,scenario.duration);
     const scored=scoreSession(scenario,detectionRef.current,answerRef.current,duration);
-    const session:Session={version:1,id:crypto.randomUUID(),createdAt:new Date().toISOString(),scenario,duration,detection:detectionRef.current,answer:answerRef.current,...scored,events:[...events.current,{time:duration,type:'finish',label:'Exercise completed'}]};
+    const session:Session={version:1,id:crypto.randomUUID(),createdAt:new Date().toISOString(),scenario,duration,detection:detectionRef.current,answer:answerRef.current,...scored,events:[...events.current,{time:duration,type:'finish',label:'Exercise completed'}],theatre:theatreRef.current};
     const updated=[session,...historyRef.current].slice(0,20);historyRef.current=updated;setHistory(updated);setSelectedId(session.id);transition('review');
     if(!saveSessions(updated))setNotice('Browser storage is unavailable. Results will remain available during this visit.');
   },[scenario]);
@@ -91,7 +92,7 @@ export default function App() {
   };window.addEventListener('keydown',keydown);return()=>window.removeEventListener('keydown',keydown);},[pause,resume,mark,classify]);
   function repeat(session:Session,newVariation=false){setScenarioVersion(newVariation?2:session.scenario.version);setExercise(session.scenario.exercise);setDifficulty(session.scenario.difficulty);setDusk(session.scenario.dusk);setSeed(newVariation?newSeed():session.scenario.seed);setCameraView('overview');reset();}
   function nextChallenge(){if(!result)return;if(!result.observationValid){setExercise('skyline');setDifficulty('guided');setDusk(false);setSeed(newSeed());reset();return;}if(result.classificationScore===0||result.detectionScore<25){repeat(result);return;}setExercise(result.scenario.difficulty==='guided'?result.scenario.exercise:'mixed');setDifficulty(result.scenario.difficulty==='guided'?'challenge':'guided');setDusk(result.scenario.dusk);setSeed(newSeed());reset();}
-  function selectSession(id:string){const session=history.find(s=>s.id===id);if(!session)return;setSelectedId(id);setExercise(session.scenario.exercise);setDifficulty(session.scenario.difficulty);setDusk(session.scenario.dusk);setSeed(session.scenario.seed);setScenarioVersion(session.scenario.version);}
+  function selectSession(id:string){const session=history.find(s=>s.id===id);if(!session)return;setSelectedId(id);setExercise(session.scenario.exercise);setDifficulty(session.scenario.difficulty);setDusk(session.scenario.dusk);setSeed(session.scenario.seed);setScenarioVersion(session.scenario.version);if(session.theatre)changeTheatre(session.theatre);}
   const [radarSlot,setRadarSlot]=useState<HTMLDivElement|null>(null);
   const variation=variationNumber(seed);
   const stateLabel=phase==='running'?'LIVE':phase==='paused'?'HOLD':phase==='review'?'DEBRIEF':'STANDBY';
