@@ -55,7 +55,7 @@ The automated checks cover seeded reproduction, contact arrival, scoring edge ca
 - `src/App.tsx`: console layout, the live simulation clock, controls, and session lifecycle.
 - `src/DelhiScene.tsx`: district geometry, vehicles, and camera motion; `src/ContactModel.tsx` places contacts in it.
 - `src/SceneView.tsx`: renderer selection, HUD, heading tape, sensor panel, graphics options, and fullscreen.
-- `src/earthNavigation.ts`: satellite gestures, camera bounds, and input cleanup; `src/earthNavigationMath.ts` contains testable input/zoom/orbit math.
+- `src/earthNavigation.ts`: satellite gestures, camera bounds, and input cleanup; `src/earthNavigationMath.ts` contains input/zoom/orbit math, and `src/earthNavigationTerrain.ts` handles surface-ray zoom and clearance along the camera path.
 - `src/SensorFeed.tsx`: the EO/IR camera.
 - `src/Radar.tsx`: shared-position radar visualization.
 - `src/RecognitionGuide.tsx`: recognition cues.
@@ -92,6 +92,8 @@ On a Mac, geographic theatres default to **Trackpad** input: **one-finger click-
 Geographic theatres use CesiumJS. Without credentials they stream Esri World Imagery draped on **Esri World Elevation 3D terrain**, so mountains, valleys and ridgelines render in relief with sun shading. With `VITE_GOOGLE_MAPS_API_KEY` (Map Tiles API enabled) or `VITE_CESIUM_ION_TOKEN`, they use **Google Photorealistic 3D Tiles**, the Google Earth-style mesh; coverage and detail depend on Google. Copy `.env.example` to `.env.local` (and add the same variable in Vercel) to enable it. Browser credentials are visible to users: restrict them by HTTP referrer and API.
 
 For each theatre the app samples the rendered surface on rings 150 m and 320 m around the site and sets the airspace datum to the highest point, so contacts fly over ridges rather than through them; the HUD shows the datum. Camera presets are framed per terrain (Overview / Ridgeline / Ground in mountains) and are raised automatically if they would end inside a slope. This is an illustrative placement, not a validated terrain-collision or line-of-sight model.
+
+Pinch, wheel and button zoom follow the rendered hillside under the pointer (or the view centre), independently of the exercise airspace datum. Zoom preserves the viewing direction and stops before entering loaded terrain, with a 35 m ground-clearance limit. Terrain detail can change as tiles load.
 
 The app draws its own site marker and does not overlay third-party boundary or place-name layers, whose depiction of borders may not match official Indian maps. Provider attribution stays visible. Thermal view is offered only in the training district, because satellite photography carries no heat information. Training contacts remain synthetic and follow the same recorded scenario and radar coordinates; each training unit maps to eight metres in Earth view. Guided mode sets a minimum on-screen contact size.
 

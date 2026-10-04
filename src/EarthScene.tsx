@@ -201,7 +201,7 @@ export default function EarthScene(props: Props) {
       frameCamera(viewer, current.current.theatre, 'overview', groundHeight.current, 0);updateCamera();current.current.onHome();
     };
     navigation.current=attachEarthNavigation(viewer,{
-      input:()=>current.current.input,groundHeight:()=>groundHeight.current,
+      input:()=>current.current.input,
       fallbackTarget:anchor,
       onInteraction:()=>{interacted.current=true;},onChange:updateCamera,
     });
