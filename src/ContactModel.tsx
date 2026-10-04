@@ -3,7 +3,6 @@ import { useFrame } from '@react-three/fiber';
 import type { Group } from 'three';
 import { createBirdModel, createDroneModel, disposeModel, poseContact, type ContactPalette } from './contactGeometry';
 import { contactKinematics } from './kinematics';
-import { airframeFor } from './airframes';
 import type { Scenario } from './simulation';
 
 type Props = {
@@ -15,10 +14,10 @@ type Props = {
 /** One airframe following the shared trajectory with trajectory-derived attitude. */
 export default function ContactModel({ scenario, time, index, palette = 'visible', metresPerUnit = 1, onSelect, children }: Props) {
   const bird = scenario.category === 'Bird';
-  // The airframe type is a deterministic function of the variation, so repeats look identical.
-  const airframe = airframeFor(scenario);
+  // Livery is a deterministic function of the variation so repeats look identical.
+  const livery = (scenario.seed + index) % 3 === 0 ? 'white' : 'graphite';
   const dusk = scenario.dusk;
-  const model = useMemo(() => bird || !airframe ? createBirdModel({ palette }) : createDroneModel({ palette, airframe, dusk }), [bird, palette, airframe, dusk]);
+  const model = useMemo(() => bird ? createBirdModel({ palette }) : createDroneModel({ palette, livery, dusk }), [bird, palette, livery, dusk]);
   useEffect(() => () => disposeModel(model), [model]);
   const ref = useRef<Group>(null);
   useFrame(() => {
@@ -29,8 +28,7 @@ export default function ContactModel({ scenario, time, index, palette = 'visible
     poseContact(target, model, bird, k, t, index);
     if (metresPerUnit !== 1) target.position.multiplyScalar(metresPerUnit);
   });
-  // Marked so scene-wide material swaps (thermal view) leave the airframe's own palette alone.
-  return <group ref={ref} userData={{ contact: true }}>
+  return <group ref={ref}>
     <primitive object={model} />
     {onSelect && <mesh onClick={event => { event.stopPropagation(); onSelect(); }} onPointerOver={() => { document.body.style.cursor = 'crosshair'; }} onPointerOut={() => { document.body.style.cursor = 'auto'; }}>
       {/* Generous invisible pick volume: a real-size airframe is only a few pixels wide at range. */}

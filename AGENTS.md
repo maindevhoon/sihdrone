@@ -38,7 +38,6 @@ node --import tsx scripts/create-contact-models.mjs
 | --- | --- |
 | `src/App.tsx` | Console layout, exercise clock, session transitions, observation/classification, keyboard controls |
 | `src/simulation.ts` | Scenario types, seeded generation, contact positions, scoring, recommendations |
-| `src/airframes.ts` | Published airframe specifications and the seed-based airframe choice; `airframes.test.ts` checks models against them |
 | `src/kinematics.ts` | Velocity, heading, attitude, wingbeat and strobe timing derived from `contactPosition` |
 | `src/contactGeometry.ts` | Real-size drone/kite builders and pose/animation shared by the scene, sensor feed and GLB export |
 | `src/ContactModel.tsx` | R3F wrapper that places a contact model on the shared trajectory |
@@ -51,12 +50,7 @@ node --import tsx scripts/create-contact-models.mjs
 | `src/EarthScene.tsx` | Cesium viewer, streamed imagery/tiles, geographic contacts, resource cleanup |
 | `src/Radar.tsx` | Interactive synthetic situation display |
 | `src/radarMath.ts` | Radar projection, trails, and readouts |
-| `src/Review.tsx` | Score explanation, timeline, replay, history, JSON export, print |
-| `src/analytics.ts` | Pure training-record statistics, readiness milestones, CSV export |
-| `src/Progress.tsx` | Progress dashboard and trainee profile fields |
-| `src/acoustics.ts` | Rotor loudness/pitch model and Web Audio renderer |
-| `src/HelpDialog.tsx` | First-visit guide and keyboard reference |
-| `public/sw.js` | Production-only service worker; bump `VERSION` when its caching logic changes |
+| `src/Review.tsx` | Score explanation, timeline, replay, history, JSON export |
 | `src/styles.css` | Shared styling and responsive layouts |
 | `src/*.test.ts` | Node tests for simulation, kinematics, radar, variations, and persistence |
 | `scripts/` | Cesium asset preparation and contact-model generation |
@@ -70,8 +64,6 @@ node --import tsx scripts/create-contact-models.mjs
 - Keep the 200 numbered seed entries stable. Shuffle should cover a complete cycle without repeats and avoid repeating the current seed at a cycle boundary. Display the full seed so a variation can be reproduced.
 - All motion, radar trails, sweep animation, and recorded events use the exercise clock. Pause must freeze simulation time. An active exercise pauses when the document becomes hidden.
 - Observation time must fall after contact arrival and before the session ends to earn credit. Classification credit requires a valid observation.
-- The trainee profile is stored separately under `aeron-profile-v1` and is not part of the session schema. Readiness milestones are illustrative practice targets; do not present them as an operational qualification.
-- Rotor audio must stay a function of exercise time and contact range, and fall silent whenever the clock stops.
 - Replay must not modify the saved session or its score. Handle malformed/unavailable browser storage without breaking the exercise; history currently retains up to 20 results.
 
 ## Rendering and radar
@@ -79,8 +71,6 @@ node --import tsx scripts/create-contact-models.mjs
 - Preserve the local training scene and the Earth view. Keep heavy renderer code lazy-loaded, bound resource usage, and dispose of WebGL resources, controls, event handlers, and textures when appropriate. Check lifecycle changes under React StrictMode.
 - The simulation uses `[x, y, z]`, with `y` as altitude. Radar uses an observer at `[0, 0, 12]`. Earth mode maps each training unit to eight metres; the local scene uses one. Keep projection, range rings, trails, and numeric readouts consistent with the selected scale.
 - Radar heading-up mode rotates the projection using camera heading. Preserve range when rotating, count out-of-range contacts accurately, and never clamp them to misleading positions on the scope.
-- Airframe dimensions must stay within 2% of the published envelope in `airframes.ts`; cite the source when adding an airframe and only display published figures. Regenerate the GLBs after geometry changes.
-- Thermal views are display approximations; do not describe them as radiometric or validated sensor output.
 - Radar contact inspection may record an observation during a live exercise, but preview and replay interactions must not alter exercise results. Radar track identity reflects the operator's classification, never the scenario category.
 - Keep the cockpit-inspired display legible and its controls usable at narrow widths. Check that radar, camera presets, attribution, and bottom controls do not overlap.
 - Earth view without credentials shows satellite photography on an ellipsoid. Do not label it as photorealistic 3D buildings or surveyed terrain. Google 3D coverage has not been verified for Delhi with an authenticated account.

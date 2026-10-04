@@ -3,11 +3,10 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { BackSide, Color, PerspectiveCamera, ShaderMaterial, SRGBColorSpace, Vector3, type Mesh } from 'three';
 import ContactModel from './ContactModel';
 import { contactKinematics } from './kinematics';
-import { contactSpan } from './airframes';
 import type { Scenario } from './simulation';
 
 export type SensorMode = 'eo' | 'ir';
-export type SensorTelemetry = { azimuth: number; elevation: number; range: number; fov: number; span: number };
+export type SensorTelemetry = { azimuth: number; elevation: number; range: number; fov: number };
 type Props = {
   scenario: Scenario; time: MutableRefObject<number>; track: number; metresPerUnit: number;
   mode: SensorMode; zoom: number; onTelemetry: (telemetry: SensorTelemetry) => void;
@@ -48,7 +47,7 @@ function Gimbal({ scenario, time, track, metresPerUnit, zoom, onTelemetry }: Omi
     target.set(x*metresPerUnit, y*metresPerUnit, z*metresPerUnit);
     const offset = target.clone().sub(origin), range = offset.length();
     // Frame the airframe at about a third of the image width, widened by the operator's zoom setting.
-    const span = contactSpan(scenario), fieldWidth = span*3*zoom;
+    const span = scenario.category === 'Bird' ? 1.6 : 1.1, fieldWidth = span*3*zoom;
     const aspect = size.width/Math.max(1, size.height);
     const vertical = 2*Math.atan(fieldWidth/aspect/2/range);
     camera.fov = Math.min(30, Math.max(.25, vertical*180/Math.PI));
@@ -69,8 +68,6 @@ function Gimbal({ scenario, time, track, metresPerUnit, zoom, onTelemetry }: Omi
         azimuth: (Math.atan2(offset.x, -offset.z)*180/Math.PI + 360) % 360,
         elevation: Math.atan2(offset.y, Math.hypot(offset.x, offset.z))*180/Math.PI,
         range, fov: 2*Math.atan(Math.tan(vertical/2)*aspect)*180/Math.PI,
-        // A tracker estimates size from angular extent and range; a few percent of deterministic error.
-        span: span*(1 + .04*Math.sin(t*.7 + id*1.3)),
       });
     }
   });

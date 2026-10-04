@@ -5,11 +5,11 @@ import {
 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { birdAttitude, droneAttitude, strobeOn, wingBeat, type Kinematics } from './kinematics';
-import { AIRFRAMES, type Airframe } from './airframes';
 
 // Contact models in real-world metres (one local training unit), nose along +Z and up along +Y.
 // The same builders feed the training scene, the EO/IR sensor feed and the exported Earth-view GLBs.
 export type ContactPalette = 'visible' | 'thermal';
+export type DroneLivery = 'graphite' | 'white';
 type Swatch = { color: number; metalness?: number; roughness?: number; opacity?: number; side?: Side };
 type Rig = { props: Object3D[]; wings: Object3D[]; tail?: Object3D; strobe?: Object3D };
 const rigs = new WeakMap<Object3D, Rig>();
@@ -54,17 +54,16 @@ function lightPoints(name: string, positions: number[], color: number, size: num
 }
 
 /**
- * Quadcopter built to a reference airframe's published dimensions: motor layout, propeller
- * diameter, fuselage and landing gear all come from `airframes.ts`.
+ * Enterprise-class quadcopter: 0.71 m motor wheelbase, 0.33 m two-blade propellers
+ * (about 1.04 m tip to tip), skid landing gear and a nose gimbal camera.
  */
-export function createDroneModel({ airframe = AIRFRAMES['matrice-350-rtk'], palette = 'visible', lights = true, dusk = false }: { airframe?: Airframe; palette?: ContactPalette; lights?: boolean; dusk?: boolean } = {}) {
-  const a = airframe, root = new Group(); root.name = `drone-${a.id}`;
-  const white = a.livery === 'white', grey = a.livery === 'grey';
+export function createDroneModel({ livery = 'graphite', palette = 'visible', lights = true, dusk = false }: { livery?: DroneLivery; palette?: ContactPalette; lights?: boolean; dusk?: boolean } = {}) {
+  const white = livery === 'white', root = new Group(); root.name = 'drone';
   const bloom = dusk ? 1.8 : 1; // Navigation lights read larger against a dusk sky.
   const m = {
-    shell: material(palette, { color: white ? 0xe4e6e8 : grey ? 0x7b8086 : 0x2c3135, metalness: .12, roughness: .38 }, .4),
-    top: material(palette, { color: white ? 0xf3f4f5 : grey ? 0x8e9399 : 0x3a4045, metalness: .1, roughness: .32 }, .5),
-    arm: material(palette, { color: white ? 0xc8ccd0 : grey ? 0x6b7076 : 0x23272a, metalness: .2, roughness: .45 }, .38),
+    shell: material(palette, { color: white ? 0xe4e6e8 : 0x2c3135, metalness: .12, roughness: .38 }, .4),
+    top: material(palette, { color: white ? 0xf3f4f5 : 0x3a4045, metalness: .1, roughness: .32 }, .46),
+    arm: material(palette, { color: white ? 0xc8ccd0 : 0x23272a, metalness: .2, roughness: .45 }, .38),
     carbon: material(palette, { color: 0x17191c, metalness: .3, roughness: .55 }, .34),
     motor: material(palette, { color: 0x9aa0a6, metalness: .85, roughness: .28 }, 1),
     battery: material(palette, { color: white ? 0xd2d6d9 : 0x1d2124, roughness: .6 }, .8),
@@ -73,62 +72,44 @@ export function createDroneModel({ airframe = AIRFRAMES['matrice-350-rtk'], pale
     blade: material(palette, { color: 0x121416, roughness: .5, opacity: .42, side: DoubleSide }, .3),
     disc: material(palette, { color: 0x24282c, roughness: .9, opacity: .14, side: DoubleSide }, .28),
   };
-  const B = a.body, hb = B.height/2, nose = B.z + B.length/2;
-  const shell = add(root, new SphereGeometry(1, 28, 16), m.shell, [0, 0, B.z], 'fuselage'); shell.scale.set(B.width/2, hb, B.length/2);
-  const top = add(root, new SphereGeometry(1, 28, 10, 0, Math.PI*2, 0, Math.PI/2), m.top, [0, hb*.15, B.z - B.length*.02], 'canopy'); top.scale.set(B.width*.47, hb*.85, B.length*.47);
-  const sensor = add(root, new SphereGeometry(1, 16, 8), m.glass, [0, hb*.1, nose - .012], 'forward-sensors'); sensor.scale.set(B.width*.28, hb*.3, .01);
-  if (a.mast > 0) {
-    // Top-mounted RTK module: a short mast carrying two antenna domes.
-    add(root, new CylinderGeometry(.012, .016, a.mast*.6, 10), m.carbon, [0, hb + a.mast*.3, B.z - B.length*.1]);
-    for (const side of [-1, 1]) add(root, new SphereGeometry(.03, 16, 10), m.battery, [side*.07, hb + a.mast - .03, B.z - B.length*.1]);
-    add(root, new RoundedBoxGeometry(.2, .03, .06, 2, .01), m.battery, [0, hb + a.mast*.62, B.z - B.length*.1]);
-  }
+  const shell = add(root, new SphereGeometry(1, 28, 16), m.shell, [0, 0, 0], 'fuselage'); shell.scale.set(.11, .052, .2);
+  const top = add(root, new SphereGeometry(1, 28, 10, 0, Math.PI*2, 0, Math.PI/2), m.top, [0, .01, -.005], 'canopy'); top.scale.set(.104, .048, .19);
+  const sensor = add(root, new SphereGeometry(1, 20, 10), m.glass, [0, .004, .196], 'forward-sensors'); sensor.scale.set(.055, .018, .012);
+  add(root, new RoundedBoxGeometry(.105, .038, .15, 3, .012), m.battery, [0, .062, -.035], 'battery');
   const rig: Rig = { props: [], wings: [] };
-  const radius = a.propDiameter/2, r = a.motorRadius;
-  const bladeGeometry = new ShapeGeometry(new Shape([[.012,-.01],[.06,-.017],[.12,-.013],[.158,-.006],[.165,0],[.16,.006],[.12,.01],[.06,.014],[.012,.009]].map(([x,y]) => new Vector2(x*radius/.165, y*radius/.165))), 6).rotateX(-Math.PI/2);
-  a.motors.forEach(([mx, my, mz], index) => {
-    const sx = Math.sign(mx), sz = Math.sign(mz), motor = new Vector3(mx, my, mz);
-    const rootPoint = new Vector3(sx*B.width*.38, 0, B.z + sz*B.length*.22);
-    strut(root, rootPoint, motor, r*.45, m.arm);
-    add(root, new CylinderGeometry(r*.9, r, r*1.1, 16), m.carbon, [mx, my, mz]);
-    add(root, new CylinderGeometry(r, r, r*.8, 16), m.motor, [mx, my + r*.9, mz], 'motor');
-    // Front-left and rear-right spin one way, the other diagonal the other way.
-    const prop = new Group(); prop.name = `prop-${index}`; prop.position.set(mx, my + r*1.6, mz);
+  const blade = new Shape([[.012,-.01],[.06,-.017],[.12,-.013],[.158,-.006],[.165,0],[.16,.006],[.12,.01],[.06,.014],[.012,.009]].map(([x,y]) => new Vector2(x, y)));
+  const bladeGeometry = new ShapeGeometry(blade, 6).rotateX(-Math.PI/2);
+  [[1,1],[-1,1],[1,-1],[-1,-1]].forEach(([sx, sz], index) => {
+    const motor = new Vector3(sx*.25, .012, sz*.25);
+    add(root, new RoundedBoxGeometry(.05, .032, .055, 2, .01), m.shell, [sx*.07, 0, sz*.095]);
+    strut(root, new Vector3(sx*.07, 0, sz*.095), motor, .013, m.arm);
+    add(root, new CylinderGeometry(.027, .031, .034, 16), m.carbon, [motor.x, motor.y, motor.z]);
+    add(root, new CylinderGeometry(.03, .03, .022, 16), m.motor, [motor.x, motor.y + .028, motor.z], 'motor');
+    const prop = new Group(); prop.name = `prop-${index}`; prop.position.set(motor.x, motor.y + .05, motor.z);
     prop.userData.spin = sx*sz; root.add(prop); rig.props.push(prop);
-    add(prop, new CylinderGeometry(r*.4, r*.45, r*.4, 12), m.carbon);
+    add(prop, new CylinderGeometry(.012, .014, .012, 12), m.carbon);
     for (const turn of [0, Math.PI]) { const b = add(prop, bladeGeometry, m.blade); b.rotation.set(.12*sx, turn, 0); }
-    const disc = add(prop, new CircleGeometry(radius, 32).rotateX(-Math.PI/2), m.disc, [0, .002, 0], 'prop-disc'); disc.castShadow = false;
-    if (a.gear.type === 'feet') {
-      // Folding airframes stand on short legs under the arms.
-      strut(root, new Vector3(mx*.92, my - r*.5, mz*.92), new Vector3(mx*.92, -a.gear.depth + .004, mz*.92), .0035, m.carbon);
-      add(root, new SphereGeometry(.004, 8, 6), m.carbon, [mx*.92, -a.gear.depth + .004, mz*.92]);
-    }
+    const disc = add(prop, new CircleGeometry(.165, 32).rotateX(-Math.PI/2), m.disc, [0, .002, 0], 'prop-disc'); disc.castShadow = false;
   });
-  if (a.gear.type === 'skid') {
-    const tube = a.gear.width > .4 ? .012 : .007, x = a.gear.width/2 - tube, y = -a.gear.depth + tube;
-    for (const sx of [-1, 1]) {
-      for (const sz of [-1, 1]) strut(root, new Vector3(sx*B.width*.3, -hb*.6, B.z + sz*B.length*.22), new Vector3(sx*x, y, sz*a.gear.length*.3), tube*.8, m.carbon);
-      const skid = add(root, new CylinderGeometry(tube, tube, a.gear.length, 10), m.carbon, [sx*x, y, 0]); skid.rotation.x = Math.PI/2;
-    }
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) strut(root, new Vector3(sx*.055, -.035, sz*.055), new Vector3(sx*.1, -.15, sz*.07), .006, m.carbon);
+    const skid = add(root, new CylinderGeometry(.008, .008, .3, 10), m.carbon, [sx*.1, -.15, 0]); skid.rotation.x = Math.PI/2;
   }
-  // Gimbal camera under the nose, sized to the airframe and kept above the landing gear.
-  const g = Math.min(.06, B.width*.2), gy = Math.max(-hb - g*.9, -a.gear.depth + g + .002);
-  add(root, new RoundedBoxGeometry(g*1.1, g*.9, g*.45, 2, g*.12), m.gimbal, [0, Math.max(-hb - g*.2, gy + g*.5), nose - B.length*.16]);
-  add(root, new SphereGeometry(g, 16, 12), m.gimbal, [0, gy, nose - B.length*.12 - g*.2], 'gimbal');
-  const lens = add(root, new CylinderGeometry(g*.5, g*.55, g*.45, 18), m.glass, [0, gy, nose - B.length*.12 + g*.55]); lens.rotation.x = Math.PI/2;
+  add(root, new RoundedBoxGeometry(.034, .036, .014, 2, .005), m.gimbal, [0, -.062, .13]);
+  add(root, new SphereGeometry(.031, 16, 12), m.gimbal, [0, -.092, .138], 'gimbal');
+  const lens = add(root, new CylinderGeometry(.015, .017, .014, 18), m.glass, [0, -.092, .168]); lens.rotation.x = Math.PI/2;
   if (lights && palette === 'visible') {
     // Port red, starboard green, rear white: the arrangement used on lit commercial airframes.
-    const [fl, fr, rl, rr] = a.motors, under = (p: number[]) => [p[0], p[1] - r*.6, p[2]];
-    root.add(lightPoints('nav-red', under(fl), 0xff3b30, 4*bloom));
-    root.add(lightPoints('nav-green', under(fr), 0x38ff7a, 4*bloom));
-    root.add(lightPoints('nav-white', [...under(rl), ...under(rr)], 0xfff4e0, 3*bloom));
-    const strobe = lightPoints('strobe', [0, hb + a.mast + .004, B.z - B.length*.15], 0xffffff, 9*bloom); root.add(strobe); rig.strobe = strobe;
+    root.add(lightPoints('nav-red', [.25, -.012, .25], 0xff3b30, 4*bloom));
+    root.add(lightPoints('nav-green', [-.25, -.012, .25], 0x38ff7a, 4*bloom));
+    root.add(lightPoints('nav-white', [.25, -.012, -.25, -.25, -.012, -.25], 0xfff4e0, 3*bloom));
+    const strobe = lightPoints('strobe', [0, .09, -.03], 0xffffff, 9*bloom); root.add(strobe); rig.strobe = strobe;
   }
   rigs.set(root, rig);
   return root;
 }
 
-/** Black kite (Milvus migrans): about 1.5 m wingspan and 0.58 m long, fingered primaries and a shallow forked tail. */
+/** Black kite (Milvus migrans): about 1.55 m wingspan, fingered primaries and a shallow forked tail. */
 export function createBirdModel({ palette = 'visible' }: { palette?: ContactPalette } = {}) {
   const root = new Group(); root.name = 'bird';
   const m = {
@@ -138,10 +119,10 @@ export function createBirdModel({ palette = 'visible' }: { palette?: ContactPale
     body: material(palette, { color: 0x56432f, roughness: .9 }, .92),
     beak: material(palette, { color: 0xcdb45c, roughness: .55 }, .6),
   };
-  const body = add(root, new SphereGeometry(1, 28, 18), m.body, [0, 0, 0], 'body'); body.scale.set(.07, .068, .19);
-  const head = add(root, new SphereGeometry(.046, 22, 16), m.head, [0, .025, .18], 'head'); head.scale.set(1, .95, 1.15);
-  const beak = add(root, new CylinderGeometry(0, .014, .045, 10), m.beak, [0, .016, .23]); beak.rotation.x = Math.PI/2 + .25;
-  const wingShape = new Shape([[0,.11],[.18,.15],[.36,.15],[.52,.11],[.66,.05],[.74,-.01],[.73,-.05],[.68,-.04],[.7,-.09],[.63,-.08],[.64,-.13],[.56,-.12],[.55,-.16],[.42,-.17],[.25,-.18],[.08,-.15],[0,-.12]].map(([x,y]) => new Vector2(x*.95, y)));
+  const body = add(root, new SphereGeometry(1, 28, 18), m.body, [0, 0, 0], 'body'); body.scale.set(.072, .07, .25);
+  const head = add(root, new SphereGeometry(.048, 22, 16), m.head, [0, .025, .235], 'head'); head.scale.set(1, .95, 1.15);
+  const beak = add(root, new CylinderGeometry(0, .015, .05, 10), m.beak, [0, .016, .295]); beak.rotation.x = Math.PI/2 + .25;
+  const wingShape = new Shape([[0,.11],[.18,.15],[.36,.15],[.52,.11],[.66,.05],[.74,-.01],[.73,-.05],[.68,-.04],[.7,-.09],[.63,-.08],[.64,-.13],[.56,-.12],[.55,-.16],[.42,-.17],[.25,-.18],[.08,-.15],[0,-.12]].map(([x,y]) => new Vector2(x, y)));
   const wingGeometry = new ShapeGeometry(wingShape, 4).rotateX(Math.PI/2);
   const rig: Rig = { props: [], wings: [] };
   for (const side of [1, -1]) {
@@ -149,8 +130,8 @@ export function createBirdModel({ palette = 'visible' }: { palette?: ContactPale
     add(wing, side > 0 ? wingGeometry : wingGeometry.clone().scale(-1, 1, 1), m.wing);
     root.add(wing); rig.wings.push(wing);
   }
-  const tail = new Group(); tail.name = 'tail'; tail.position.set(0, .01, -.15); root.add(tail); rig.tail = tail;
-  add(tail, new ShapeGeometry(new Shape([[-.05,0],[.05,0],[.1,-.18],[.045,-.155],[0,-.14],[-.045,-.155],[-.1,-.18]].map(([x,y]) => new Vector2(x, y)))).rotateX(Math.PI/2), m.plumage);
+  const tail = new Group(); tail.name = 'tail'; tail.position.set(0, .01, -.2); root.add(tail); rig.tail = tail;
+  add(tail, new ShapeGeometry(new Shape([[-.05,0],[.05,0],[.11,-.25],[.05,-.21],[0,-.19],[-.05,-.21],[-.11,-.25]].map(([x,y]) => new Vector2(x, y)))).rotateX(Math.PI/2), m.plumage);
   rigs.set(root, rig);
   return root;
 }

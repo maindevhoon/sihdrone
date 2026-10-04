@@ -21,11 +21,3 @@ export function readSessions(): Session[] {
   try {const raw:unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');return Array.isArray(raw) ? raw.filter(validSession).slice(0,20) : [];} catch {return [];}
 }
 export function saveSessions(sessions: Session[]) {try {localStorage.setItem(STORAGE_KEY,JSON.stringify(sessions.slice(0,20)));return true;}catch{return false;}}
-// Trainee identity for printed reports and exports. Stored separately so the session schema is unchanged.
-export type Profile = { name: string; unit: string };
-export const PROFILE_KEY = 'aeron-profile-v1';
-const clean = (value: unknown) => typeof value === 'string' ? value.trim().slice(0, 60) : '';
-export function readProfile(): Profile {
-  try {const raw = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}') as Partial<Profile> | null;return {name: clean(raw?.name), unit: clean(raw?.unit)};} catch {return {name: '', unit: ''};}
-}
-export function saveProfile(profile: Profile) {try {localStorage.setItem(PROFILE_KEY, JSON.stringify({name: clean(profile.name), unit: clean(profile.unit)}));return true;} catch {return false;}}

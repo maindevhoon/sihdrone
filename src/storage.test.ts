@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { PROFILE_KEY, readProfile, readSessions, saveProfile, saveSessions, STORAGE_KEY } from './storage';
+import { readSessions, saveSessions, STORAGE_KEY } from './storage';
 import { createScenario, scoreSession, type Session } from './simulation';
 class MemoryStorage {values=new Map<string,string>();getItem(key:string){return this.values.get(key)??null;}setItem(key:string,value:string){this.values.set(key,value);}clear(){this.values.clear();}}
 const storage=new MemoryStorage();
@@ -15,9 +15,3 @@ test('storage failure reports failure without losing the in-memory session',()=>
 
 test('legacy version-one results retain their original seed and motion',()=>{const original=session();original.scenario=createScenario('skyline',1,'guided',false,1);original.detection=original.scenario.arrival+2;Object.assign(original,scoreSession(original.scenario,original.detection,original.answer,original.duration));saveSessions([original]);assert.deepEqual(readSessions(),[original]);});
 test('tampered trajectory fields are rejected',()=>{const original=session();original.scenario.radius=900;storage.setItem(STORAGE_KEY,JSON.stringify([original]));assert.deepEqual(readSessions(),[]);});
-test('trainee profile is trimmed, bounded and tolerant of malformed storage',()=>{
-  assert.deepEqual(readProfile(),{name:'',unit:''});
-  saveProfile({name:'  Cadet A. Sharma  ',unit:'x'.repeat(90)});
-  assert.deepEqual(readProfile(),{name:'Cadet A. Sharma',unit:'x'.repeat(60)});
-  for(const value of ['{broken','null','[1]','{"name":4}']){storage.setItem(PROFILE_KEY,value);assert.deepEqual(readProfile(),{name:'',unit:''});}
-});
