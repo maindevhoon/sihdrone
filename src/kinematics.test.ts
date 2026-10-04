@@ -5,6 +5,7 @@ import {birdAttitude,contactKinematics,droneAttitude,strobeOn,wingBeat} from './
 import {createBirdModel,createDroneModel,poseContact} from './contactGeometry';
 import {contactPosition,createScenario} from './simulation';
 import {VARIATION_SEEDS} from './variations';
+import {bladePass,combinedLevel,rotorLevel} from './acoustics';
 
 test('kinematics are deterministic and positions match the shared trajectory',()=>{
   const s=createScenario('mixed',VARIATION_SEEDS[41],'challenge',true);
@@ -55,4 +56,12 @@ test('wingbeats alternate between flapping bursts and glides; the strobe flashes
   assert.ok(samples.every(s=>Math.abs(s.angle)<.8));
   const flashes=Array.from({length:1100},(_,i)=>strobeOn(i*.01,0)).filter(Boolean).length;
   assert.ok(flashes>0&&flashes<120);
+});
+test('rotor audio fades with range, sums energy across airframes and rises in pitch with effort',()=>{
+  assert.equal(rotorLevel(2),1);assert.equal(rotorLevel(5),1);
+  assert.ok(rotorLevel(30)>rotorLevel(240)&&rotorLevel(240)>0);
+  assert.equal(rotorLevel(400),0);assert.equal(rotorLevel(NaN),0);
+  assert.ok(combinedLevel([.5,.5])>.5&&combinedLevel([1,1])===1);
+  assert.equal(bladePass(200,0,0),200);assert.ok(bladePass(200,4,1)>bladePass(200,1,0));assert.ok(bladePass(200,100,100)<=270);
+  assert.ok(bladePass(110,2,0)<bladePass(330,2,0));
 });
