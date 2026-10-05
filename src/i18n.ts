@@ -33,7 +33,7 @@ const hi: Record<string, string> = {
   'SITUATION': 'स्थिति', 'Radar · simulated': 'रडार · सिम्युलेटेड', 'OBSERVATION': 'अवलोकन', 'CLASSIFICATION': 'वर्गीकरण',
   'SCANNING': 'स्कैनिंग', 'AWAITING MARK': 'अंकन की प्रतीक्षा', 'NOT STARTED': 'शुरू नहीं हुआ', 'MARKED': 'अंकित',
   'Confirm the type on the EO/IR feed, then classify the contact.': 'EO/IR फ़ीड पर प्रकार की पुष्टि करें, फिर संपर्क को वर्गीकृत करें।',
-  'The scene shows a sample moment. Start the exercise to practise detection.': 'दृश्य एक नमूना क्षण दिखाता है। पहचान का अभ्यास करने के लिए अभ्यास शुरू करें।',
+  'Preview playback is unscored. Start the exercise to practise detection.': 'पूर्वावलोकन में अंक नहीं मिलते। पहचान का अभ्यास करने के लिए अभ्यास शुरू करें।',
   'Mark as soon as you see aerial movement. Timing counts from arrival.': 'हवाई हलचल दिखते ही अंकित करें। समय आगमन से गिना जाता है।',
   'Mark observation': 'अवलोकन अंकित करें', 'Observation recorded': 'अवलोकन दर्ज हुआ',
   'Single drone': 'एकल ड्रोन', 'Drone group': 'ड्रोन समूह', 'Bird': 'पक्षी',

@@ -5,8 +5,9 @@ import { Focus, MapPin, Maximize2, Minus, Pause, Play, Plus, Video, VideoOff, Vo
 const EarthScene = lazy(() => import('./EarthScene'));
 const DelhiScene = lazy(() => import('./DelhiScene'));
 import Radar from './Radar';
+import { DEFAULT_RADAR_OBSERVER } from './radarMath';
 import SensorFeed, { type SensorMode, type SensorTelemetry } from './SensorFeed';
-import { visibleContacts, type CameraView, type Category, type Scenario } from './simulation';
+import { visibleContacts, type CameraView, type Category, type Position, type Scenario } from './simulation';
 import { contactKinematics } from './kinematics';
 import { bladePass, combinedLevel, rotorLevel, RotorAudio } from './acoustics';
 import { airframeFor } from './airframes';
@@ -17,7 +18,7 @@ class SceneBoundary extends Component<{children:ReactNode;label:string},{failed:
   static getDerivedStateFromError(){return {failed:true};}
   render(){return this.state.failed?<div className="canvas-error"><Focus size={28}/><h3>{this.props.label} unavailable</h3><p>Enable hardware acceleration in your browser.</p></div>:this.props.children;}
 }
-type Props = { scenario:Scenario; time:MutableRefObject<number>; displayTime:number; selected:boolean; phase:'preview'|'running'|'paused'|'replay'; cameraView:CameraView; onCameraChange:(view:CameraView)=>void; onSelect:()=>void; onResume?:()=>void; onPause?:()=>void; onNotice?:(notice:string)=>void; radarTarget?:HTMLElement|null; assessment?:Category|''; theatre:Theatre; onTheatreChange:(id:TheatreId)=>void };
+type Props = { scenario:Scenario; time:MutableRefObject<number>; displayTime:number; selected:boolean; phase:'preview'|'running'|'paused'|'replay'; cameraView:CameraView; onCameraChange:(view:CameraView)=>void; onSelect:()=>void; onResume?:()=>void; onPause?:()=>void; previewPlaying?:boolean; onTogglePreview?:()=>void; replayPlaying?:boolean; onNotice?:(notice:string)=>void; radarTarget?:HTMLElement|null; assessment?:Category|''; theatre:Theatre; onTheatreChange:(id:TheatreId)=>void };
 type ThermalPalette='white'|'black'|'iron';
 const paletteLabels:Record<ThermalPalette,string>={white:'White hot',black:'Black hot',iron:'Ironbow'};
 const zoomLevels=[{factor:6,label:'WFOV'},{factor:2.5,label:'MFOV'},{factor:1,label:'NFOV'}];
@@ -29,12 +30,16 @@ function HeadingTape({bearing}:{bearing:number}) {
     <strong>{bearing.toString().padStart(3,'0')}°</strong>
   </div>;
 }
-export default function SceneView({scenario,time,displayTime,selected,phase,cameraView,onCameraChange,onSelect,onResume,onPause,onNotice,radarTarget,assessment='',theatre,onTheatreChange}:Props) {
+export default function SceneView({scenario,time,displayTime,selected,phase,cameraView,onCameraChange,onSelect,onResume,onPause,previewPlaying=false,onTogglePreview,replayPlaying=false,onNotice,radarTarget,assessment='',theatre,onTheatreChange}:Props) {
   const [bearing,setBearing]=useState(0);
   const world=isGeographic(theatre)?'earth':'training';
   const [earthStatus,setEarthStatus]=useState('Loading satellite imagery and 3D terrain…');
   const [ground,setGround]=useState<number|null>(null);
-  useEffect(()=>setGround(null),[theatre]);
+  const [earthObserver,setEarthObserver]=useState<Position>(DEFAULT_RADAR_OBSERVER);
+  const observer=world==='earth'?earthObserver:DEFAULT_RADAR_OBSERVER;
+  const observerRef=useRef(observer);observerRef.current=observer;
+  const updateObserver=useCallback((next:Position)=>setEarthObserver(previous=>next.some((value,i)=>Math.abs(value-previous[i])>.001)?next:previous),[]);
+  useEffect(()=>{setGround(null);setEarthObserver(DEFAULT_RADAR_OBSERVER);},[theatre]);
   const [labels,setLabels]=useState(true);
   const [earthInput,setEarthInput]=useState<NavigationInput>(()=>/Mac|iPad|iPhone/.test(navigator.platform)?'trackpad':'mouse');
   const [quality,setQuality]=useState<'balanced'|'high'>('balanced');
@@ -69,7 +74,8 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
         let nearest=Infinity,pitch=airframe.bladePassHz;const levels:number[]=[];
         for(const {id} of visibleContacts(scenario,t)){
           const k=contactKinematics(scenario,t,id),[x,y,z]=k.position;
-          const range=Math.hypot(x*metresPerUnit,y*metresPerUnit-1.6,(z-12)*metresPerUnit);
+          const origin=observerRef.current;
+          const range=Math.hypot((x-origin[0])*metresPerUnit,(y-origin[1])*metresPerUnit-1.6,(z-origin[2])*metresPerUnit);
           levels.push(Math.min(1,rotorLevel(range)*airframe.loudness));
           if(range<nearest){nearest=range;pitch=bladePass(airframe.bladePassHz,k.speed,k.forwardAccel);}
         }
@@ -98,11 +104,11 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
   const views=(['overview','rooftop','street'] as CameraView[]).map(id=>({id,label:cameraLabels[theatre.kind][id]}));
   const coordinates=theatre.latitude!==undefined&&theatre.longitude!==undefined?`${theatre.latitude.toFixed(4)}° N  ${theatre.longitude.toFixed(4)}° E`:'';
   const stateLabel=phase==='running'?'LIVE':phase==='paused'?'HOLD':phase==='replay'?'REPLAY':'PREVIEW';
-  const radar=<Radar scenario={scenario} time={displayTime} selected={selected} paused={phase==='paused'||phase==='preview'} preview={phase==='preview'} replay={phase==='replay'} bearing={bearing} metresPerUnit={metresPerUnit} track={track} assessment={assessment} onTrack={id=>{setTrack(id);setSensorCue(true);setSensorOpen(true);}} onSelect={onSelect}/>;
+  const radar=<Radar scenario={scenario} time={displayTime} selected={selected} paused={phase==='paused'||(phase==='preview'&&!previewPlaying)||(phase==='replay'&&!replayPlaying)} preview={phase==='preview'} replay={phase==='replay'} onTogglePreview={onTogglePreview} bearing={bearing} metresPerUnit={metresPerUnit} observer={observer} mapFollow={world==='earth'} track={track} assessment={assessment} onTrack={id=>{setTrack(id);setSensorCue(true);setSensorOpen(true);}} onSelect={onSelect}/>;
   const trackLabel=`T${(Math.min(track,scenario.count-1)+1).toString().padStart(2,'0')}`;
   return <div ref={sceneRef} className={`scene ${phase==='replay'?'replay-scene':''} world-${world}`}>
     <svg className="filter-defs" aria-hidden><filter id="thermal-iron" colorInterpolationFilters="sRGB"><feComponentTransfer><feFuncR type="table" tableValues="0 .25 .62 .9 1 1"/><feFuncG type="table" tableValues="0 0 .08 .38 .76 1"/><feFuncB type="table" tableValues="0 .42 .5 .08 0 .85"/></feComponentTransfer></filter></svg>
-    <div className={`main-view ${thermalActive?`thermal palette-${palette}`:''}`}><SceneBoundary label="3D view"><Suspense fallback={<div className="canvas-error"><span className="loader"/>Preparing the scene…</div>}>{world==='earth'?<EarthScene scenario={scenario} time={time} selected={selected} theatre={theatre} labels={labels} onSelect={onSelect} cameraView={cameraView} onBearingChange={updateBearing} highQuality={quality==='high'} onStatus={setEarthStatus} onGround={setGround} onHome={()=>onCameraChange('overview')} input={earthInput} onInputChange={setEarthInput} onTutorialOpen={()=>onPause?.()}/>:<Canvas shadows camera={{position:[28,22,42],fov:44,near:.2,far:600}} dpr={quality==='high'?[1,2]:[1,1.25]} gl={{antialias:true,toneMappingExposure:.9}}><DelhiScene scenario={scenario} time={time} selected={selected} onSelect={onSelect} cameraView={cameraView} onBearingChange={updateBearing} highQuality={quality==='high'} thermal={thermalActive}/></Canvas>}</Suspense></SceneBoundary></div>
+    <div className={`main-view ${thermalActive?`thermal palette-${palette}`:''}`}><SceneBoundary label="3D view"><Suspense fallback={<div className="canvas-error"><span className="loader"/>Preparing the scene…</div>}>{world==='earth'?<EarthScene scenario={scenario} time={time} selected={selected} theatre={theatre} labels={labels} onSelect={onSelect} cameraView={cameraView} onBearingChange={updateBearing} onObserverChange={updateObserver} highQuality={quality==='high'} onStatus={setEarthStatus} onGround={setGround} onHome={()=>onCameraChange('overview')} input={earthInput} onInputChange={setEarthInput} onTutorialOpen={()=>onPause?.()}/>:<Canvas shadows camera={{position:[28,22,42],fov:44,near:.2,far:600}} dpr={quality==='high'?[1,2]:[1,1.25]} gl={{antialias:true,toneMappingExposure:.9}}><DelhiScene scenario={scenario} time={time} selected={selected} onSelect={onSelect} cameraView={cameraView} onBearingChange={updateBearing} highQuality={quality==='high'} thermal={thermalActive}/></Canvas>}</Suspense></SceneBoundary></div>
     <div className="scene-vignette" aria-hidden/>
     <div className="scene-hud-top">
       <div className="scene-id">
@@ -127,7 +133,7 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
         <div className="eo-modes" role="group" aria-label="Sensor band"><button aria-pressed={sensorMode==='eo'} onClick={()=>setSensorMode('eo')}>EO</button><button aria-pressed={sensorMode==='ir'} onClick={()=>setSensorMode('ir')}>IR</button></div>
         <button className="eo-close" aria-label="Hide sensor feed" title="Hide sensor feed" onClick={()=>setSensorOpen(false)}><VideoOff size={13}/></button></header>
       <div className="eo-view">
-        {sensorActive?<SceneBoundary label="Sensor feed"><SensorFeed scenario={scenario} time={time} track={track} metresPerUnit={metresPerUnit} mode={sensorMode} zoom={zoomLevels[zoomIndex].factor} onTelemetry={setTelemetry}/></SceneBoundary>
+        {sensorActive?<SceneBoundary label="Sensor feed"><SensorFeed scenario={scenario} time={time} track={track} metresPerUnit={metresPerUnit} observer={observer} mode={sensorMode} zoom={zoomLevels[zoomIndex].factor} onTelemetry={setTelemetry}/></SceneBoundary>
           :<div className="eo-standby"><strong>SENSOR STANDBY</strong><span>{phase==='running'?'Mark an observation or select a radar track to slew the camera.':'Select a radar track to slew the camera.'}</span></div>}
         {sensorActive&&<><svg className="eo-reticle" viewBox="0 0 100 62" preserveAspectRatio="none" aria-hidden><path d="M50 22v-9M50 40v9M38 31h-9M62 31h9"/><path d="M41 25v-3h3M56 22h3v3M59 37v3h-3M44 40h-3v-3" className="eo-gate"/></svg>
           <div className="eo-overlay-top"><span>{trackLabel} · AUTO TRACK</span><span>{zoomLevels[zoomIndex].label}{telemetry?` ${telemetry.fov.toFixed(1)}°`:''}</span></div>
@@ -138,6 +144,6 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
     </section>:<button className="eo-show" onClick={()=>setSensorOpen(true)}><Video size={14}/>Show EO/IR sensor</button>}
     {radarTarget?createPortal(radar,radarTarget):radar}
     <div className="scene-bottom"><span className="scene-hint">{world==='earth'?(earthInput==='trackpad'?'Click-drag to pan · Two-finger scroll to orbit · Pinch to zoom':'Drag to pan · Scroll to zoom · Right-drag to orbit'):'Drag to orbit · Scroll to zoom · Click an aircraft to observe'}</span><label className="quality-control"><span>GFX</span><select aria-label="Graphics quality" value={quality} onChange={e=>setQuality(e.target.value as 'balanced'|'high')}><option value="balanced">Balanced</option><option value="high">High</option></select></label></div>
-    {phase==='paused'&&<div className="pause-overlay"><Pause size={26}/><h3>Exercise on hold</h3><p>The exercise clock, radar and sensor are frozen.</p><button onClick={onResume}><Play size={15}/>Resume</button></div>}
+    {phase==='paused'&&<div className="pause-overlay"><Pause size={26}/><h3>Exercise on hold</h3><p>Contact motion, radar sweep and the exercise clock are frozen.</p><button onClick={onResume}><Play size={15}/>Resume</button></div>}
   </div>;
 }

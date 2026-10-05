@@ -7,7 +7,8 @@ import {
   type Entity,
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { contactPosition, type CameraView, type Scenario } from './simulation';
+import { contactPosition, type CameraView, type Position, type Scenario } from './simulation';
+import { earthRadarObserver } from './earthRadarObserver';
 import { attachEarthNavigation, type EarthNavigation } from './earthNavigation';
 import type { NavigationInput } from './earthNavigationMath';
 import { Compass, Home, Minus, Plus, HelpCircle } from 'lucide-react';
@@ -20,6 +21,7 @@ type Props = {
   scenario: Scenario; time: MutableRefObject<number>; selected: boolean; theatre: Theatre; labels: boolean;
   cameraView: CameraView; highQuality: boolean; onSelect: () => void;
   onBearingChange: (bearing: number) => void; onStatus: (status: string) => void; onGround?: (height: number) => void;
+  onObserverChange: (observer: Position) => void;
   onHome:()=>void; onTutorialOpen:()=>void; input:NavigationInput; onInputChange:(input:NavigationInput)=>void;
 };
 const env = (import.meta as ImportMeta & {env: Record<string, string | undefined>}).env;
@@ -83,7 +85,7 @@ export default function EarthScene(props: Props) {
     setHelp(false);
     try { sessionStorage.setItem('aeron-gesture-guide-v2', 'seen'); } catch { /* Guide remains usable without storage. */ }
   };
-  const openHelp = () => { props.onTutorialOpen(); setHelp(true); };
+  const openHelp = () => { navigation.current?.cancel(); props.onTutorialOpen(); setHelp(true); };
   current.current = props;
 
   useEffect(() => {
@@ -157,8 +159,13 @@ export default function EarthScene(props: Props) {
         }));
       }
     };
-    let contactConfig = '';
+    let contactConfig = '', lastDatum = NaN;
+    const lastCameraPosition = new Cartesian3(), lastCameraDirection = new Cartesian3();
     const update = viewer.scene.preRender.addEventListener(() => {
+      // Cesium's percentage-based changed event can miss a short drag. Check the pose as well,
+      // including native drag inertia, camera flights and asynchronous airspace-datum updates.
+      if (!Cartesian3.equals(lastCameraPosition, viewer.camera.positionWC) ||
+          !Cartesian3.equals(lastCameraDirection, viewer.camera.directionWC) || lastDatum !== groundHeight.current) updateCamera();
       const {scenario,time,selected} = current.current;
       ensureContacts(scenario.count);
       const signature=`${modelUri()}/${scenario.difficulty}/${selected}/${scenario.count}`;
@@ -175,6 +182,12 @@ export default function EarthScene(props: Props) {
     });
     const updateCamera = () => {
       current.current.onBearingChange(Math.round(CesiumMath.toDegrees(viewer.camera.heading))%360);
+      const inverse = Matrix4.inverseTransformation(frame(), new Matrix4());
+      const observer = earthRadarObserver(inverse, viewer.camera.positionWC, viewer.camera.directionWC, lookAbove(current.current.theatre));
+      if (observer) current.current.onObserverChange(observer);
+      Cartesian3.clone(viewer.camera.positionWC, lastCameraPosition);
+      Cartesian3.clone(viewer.camera.directionWC, lastCameraDirection);
+      lastDatum = groundHeight.current;
       const element=container.current;
       if(element){
         const point=viewer.camera.positionCartographic;
@@ -198,7 +211,7 @@ export default function EarthScene(props: Props) {
     home.current=()=>{
       navigation.current?.cancel();viewer.camera.cancelFlight();interacted.current=true;
       previousView.current='overview';
-      frameCamera(viewer, current.current.theatre, 'overview', groundHeight.current, 0);updateCamera();current.current.onHome();
+      frameCamera(viewer, current.current.theatre, 'overview', groundHeight.current, .6);updateCamera();current.current.onHome();
     };
     navigation.current=attachEarthNavigation(viewer,{
       input:()=>current.current.input,
@@ -276,6 +289,7 @@ export default function EarthScene(props: Props) {
     frameCamera(viewer, current.current.theatre, props.cameraView, groundHeight.current, .8);
   },[props.cameraView]);
   useEffect(() => { if (help) current.current.onTutorialOpen(); }, [help]);
+  useEffect(() => { navigation.current?.cancel(); }, [props.input]);
   useEffect(() => {
     const viewer=viewerRef.current;if(!viewer)return;
     viewer.resolutionScale=props.highQuality?1:.85;

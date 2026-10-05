@@ -4,15 +4,16 @@ import { BackSide, Color, PerspectiveCamera, ShaderMaterial, SRGBColorSpace, Vec
 import ContactModel from './ContactModel';
 import { contactKinematics } from './kinematics';
 import { contactSpan } from './airframes';
-import type { Scenario } from './simulation';
+import type { Position, Scenario } from './simulation';
+import { DEFAULT_RADAR_OBSERVER } from './radarMath';
 
 export type SensorMode = 'eo' | 'ir';
 export type SensorTelemetry = { azimuth: number; elevation: number; range: number; fov: number; span: number };
 type Props = {
   scenario: Scenario; time: MutableRefObject<number>; track: number; metresPerUnit: number;
-  mode: SensorMode; zoom: number; onTelemetry: (telemetry: SensorTelemetry) => void;
+  observer?: Position; mode: SensorMode; zoom: number; onTelemetry: (telemetry: SensorTelemetry) => void;
 };
-// Sensor head on a 3 m mast at the radar observer position ([0, 0, 12] in training units).
+// Sensor head on a 3 m mast above the shared radar observer.
 const SENSOR_HEIGHT = 3;
 type Sky = { zenith: number[]; horizon: number[]; ground: number[]; sun: number[] };
 const skies: Record<'day' | 'dusk' | 'ir', Sky> = {
@@ -37,14 +38,15 @@ function SkyDome({ sky, dusk }: { sky: Sky; dusk: boolean }) {
   return <mesh ref={ref} material={material} renderOrder={-1} frustumCulled={false}><sphereGeometry args={[3000, 32, 16]} /></mesh>;
 }
 
-function Gimbal({ scenario, time, track, metresPerUnit, zoom, onTelemetry }: Omit<Props, 'mode'>) {
+function Gimbal({ scenario, time, track, metresPerUnit, observer=DEFAULT_RADAR_OBSERVER, zoom, onTelemetry }: Omit<Props, 'mode'>) {
   const camera = useThree(state => state.camera) as PerspectiveCamera;
   const size = useThree(state => state.size);
-  const scratch = useMemo(() => ({ target: new Vector3(), origin: new Vector3(0, SENSOR_HEIGHT, 12*metresPerUnit), right: new Vector3(), up: new Vector3(0, 1, 0), last: 0, key: '' }), [metresPerUnit]);
+  const scratch = useMemo(() => ({ target: new Vector3(), origin: new Vector3(), right: new Vector3(), up: new Vector3(0, 1, 0), last: 0, key: '' }), [metresPerUnit]);
   useFrame(() => {
     const t = time.current, id = Math.min(track, scenario.count - 1);
     const [x, y, z] = contactKinematics(scenario, t, id).position;
     const { target, origin, right, up } = scratch;
+    origin.set(observer[0]*metresPerUnit, observer[1]*metresPerUnit+SENSOR_HEIGHT, observer[2]*metresPerUnit);
     target.set(x*metresPerUnit, y*metresPerUnit, z*metresPerUnit);
     const offset = target.clone().sub(origin), range = offset.length();
     // Frame the airframe at about a third of the image width, widened by the operator's zoom setting.
@@ -53,7 +55,7 @@ function Gimbal({ scenario, time, track, metresPerUnit, zoom, onTelemetry }: Omi
     const vertical = 2*Math.atan(fieldWidth/aspect/2/range);
     camera.fov = Math.min(30, Math.max(.25, vertical*180/Math.PI));
     camera.aspect = aspect;
-    camera.near = Math.max(.05, range*.02); camera.far = 6000;
+    camera.near = Math.min(10, Math.max(.05, range*.02)); camera.far = Math.max(6000, range+100);
     camera.updateProjectionMatrix();
     // Small deterministic tracking error, as a real gimbal hunts around a moving target.
     right.copy(offset).cross(up).normalize();
@@ -61,8 +63,8 @@ function Gimbal({ scenario, time, track, metresPerUnit, zoom, onTelemetry }: Omi
     target.addScaledVector(right, Math.sin(t*1.3 + id)*wander).addScaledVector(up, Math.sin(t*1.7 + 1)*wander*.8);
     camera.position.copy(origin);
     camera.lookAt(target);
-    // Throttled while time runs; immediate when the track or zoom changes, including on a frozen clock.
-    const key = `${id}/${zoom}/${size.width}x${size.height}`;
+    // Throttled while time runs; update immediately for controls or map movement on a held clock.
+    const key = `${id}/${zoom}/${size.width}x${size.height}/${observer.join(',')}`;
     if (t - scratch.last > .12 || t < scratch.last || key !== scratch.key) {
       scratch.last = t; scratch.key = key;
       onTelemetry({
