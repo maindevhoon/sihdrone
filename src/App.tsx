@@ -1,10 +1,11 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronRight, CircleHelp, Eye, Focus, Moon, Pause, Play, Radio, RotateCcw, Shuffle, Sun, X } from 'lucide-react';
+import { Check, ChevronRight, CircleHelp, Eye, Moon, Pause, Play, Radio, RotateCcw, Shuffle, Sun, X } from 'lucide-react';
 import { categories, createScenario, exercises, formatTime, scoreSession, visibleContacts, type CameraView, type Category, type Difficulty, type ExerciseId, type Session, type SessionEvent } from './simulation';
 import { readProfile, readSessions, saveProfile, saveSessions, type Profile } from './storage';
 import Review from './Review';
 import RecognitionGuide from './RecognitionGuide';
 import HelpDialog from './HelpDialog';
+import BrandMark from './BrandMark';
 import { LangContext, readLang, saveLang, translate, type Lang } from './i18n';
 import { THEATRES, theatreById, type TheatreId } from './theatres';
 const Progress=lazy(()=>import('./Progress'));
@@ -104,7 +105,7 @@ export default function App() {
   const primary=phase==='ready'?{label:'Start exercise',icon:<Play size={15} fill="currentColor"/>,action:()=>reset(true)}:phase==='running'?{label:'Hold exercise',icon:<Pause size={15}/>,action:pause}:phase==='paused'?{label:'Resume exercise',icon:<Play size={15} fill="currentColor"/>,action:resume}:{label:'Run a new variation',icon:<RotateCcw size={15}/>,action:()=>{if(result)repeat(result,true);}};
   return <LangContext.Provider value={lang}><div className="app-shell">
     <header className="topbar">
-      <a className="brand" href="/" aria-label="Aeron home"><span className="brand-mark"><Focus size={17}/></span><span className="brand-name">AERON</span><span className="brand-sub">{tr('Airspace observation trainer')}</span></a>
+      <a className="brand" href="/" aria-label="Trinetra home"><span className="brand-mark"><BrandMark/></span><span className="brand-name">TRINETRA</span><span className="brand-hi" lang="hi">त्रिनेत्र</span><span className="brand-sub">{tr('Airspace observation trainer')}</span></a>
       <nav className="tabs" aria-label="Workspace"><button aria-current={page==='exercise'&&!review?'page':undefined} onClick={()=>{setPage('exercise');if(review)reset();}}>{tr('Exercise')}</button><button aria-current={page==='exercise'&&review?'page':undefined} disabled={!result||active} onClick={()=>{setPage('exercise');if(result)selectSession(result.id);transition('review');}}>{tr('Debrief')}{history.length>0&&<span className="nav-count">{history.length}</span>}</button><button aria-current={page==='progress'?'page':undefined} disabled={active} onClick={()=>setPage('progress')}>{tr('Progress')}</button></nav>
       <div className="topbar-status">
         <div className="status-block"><span>{tr('SCENARIO')}</span><strong>{tr(definition.short)} · {variation?`V${variation.toString().padStart(3,'0')}`:'Saved seed'}</strong></div>

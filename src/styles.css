@@ -658,3 +658,8 @@ kbd{font-family:var(--mono);font-size:10px;line-height:1;color:var(--text-2);bac
 /* Devanagari has no monospace face here, and letter-spacing breaks conjuncts: label styles switch in Hindi. */
 :lang(hi) :is(.section-label,.panel-head,.eyebrow,.status-block span,.state-pill,.tag,.obs-status,.seed-value,.kpi span,.review-context span,.guide-title span,.mission-facts dt,.airframe-ref dt){font-family:'IBM Plex Sans Devanagari','IBM Plex Sans',sans-serif;letter-spacing:0;text-transform:none}
 :lang(hi) :is(.section-label,.eyebrow,.status-block span,.mission-facts dt){font-size:11px}
+
+/* Trinetra wordmark */
+.topbar .brand-mark{background:none;box-shadow:0 4px 14px #e8711a33;border-radius:9px;overflow:hidden}
+.brand-hi{font-family:'IBM Plex Sans Devanagari','IBM Plex Sans',sans-serif;font-weight:700;font-size:15px;color:#E8711A;margin-left:-2px}
+@media (max-width:640px){.brand-hi{display:none}}

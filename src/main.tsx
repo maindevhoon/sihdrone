@@ -7,7 +7,7 @@ import './styles.css';
 class AppBoundary extends Component<{children:ReactNode},{failed:boolean}> {
   state={failed:false};
   static getDerivedStateFromError(){return {failed:true};}
-  render(){return this.state.failed?<main className="app-error"><div><h1>Aeron hit an unexpected problem</h1><p>Your saved results are still in this browser. Reload to continue training.</p><button className="primary-button" onClick={()=>location.reload()}>Reload</button></div></main>:this.props.children;}
+  render(){return this.state.failed?<main className="app-error"><div><h1>Trinetra hit an unexpected problem</h1><p>Your saved results are still in this browser. Reload to continue training.</p><button className="primary-button" onClick={()=>location.reload()}>Reload</button></div></main>:this.props.children;}
 }
 createRoot(document.getElementById('root')!).render(<React.StrictMode><AppBoundary><App /></AppBoundary></React.StrictMode>);
 

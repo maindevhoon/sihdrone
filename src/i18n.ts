@@ -57,9 +57,9 @@ const hi: Record<string, string> = {
   'Size reference': 'आकार संदर्भ', 'Published figures': 'प्रकाशित आँकड़े',
   "Small UAS are roughly 0.3–1.4 m tip to tip; a kite spans about 1.5 m. Compare with the EO feed's SPAN estimate.": 'छोटे UAS सिरे से सिरे तक लगभग 0.3–1.4 मी. होते हैं; चील के पंख लगभग 1.5 मी. फैले होते हैं। EO फ़ीड के SPAN अनुमान से मिलाएँ।',
   // Operator guide
-  'WELCOME TO AERON': 'AERON में आपका स्वागत है', 'OPERATOR GUIDE': 'ऑपरेटर गाइड',
+  'WELCOME TO TRINETRA': 'त्रिनेत्र में आपका स्वागत है', 'OPERATOR GUIDE': 'ऑपरेटर गाइड',
   'Detect, observe, identify, debrief': 'पता लगाएँ, देखें, पहचानें, समीक्षा करें', 'Procedure and shortcuts': 'प्रक्रिया और शॉर्टकट',
-  'Aeron trains low-altitude aerial observation. Each 45-second exercise brings drones, drone groups or black kites; your job is to notice them early and identify them correctly.': 'Aeron कम ऊँचाई की हवाई निगरानी का प्रशिक्षण देता है। हर 45 सेकंड के अभ्यास में ड्रोन, ड्रोन समूह या काली चीलें आती हैं; आपका काम उन्हें जल्दी देखना और सही पहचानना है।',
+  'Trinetra trains low-altitude aerial observation. Each 45-second exercise brings drones, drone groups or black kites; your job is to notice them early and identify them correctly.': 'त्रिनेत्र कम ऊँचाई की हवाई निगरानी का प्रशिक्षण देता है। हर 45 सेकंड के अभ्यास में ड्रोन, ड्रोन समूह या काली चीलें आती हैं; आपका काम उन्हें जल्दी देखना और सही पहचानना है।',
   'Watch the skyline and the radar. New returns appear as yellow unknown tracks.': 'आकाश और रडार पर नज़र रखें। नए संकेत पीले अज्ञात ट्रैक के रूप में दिखते हैं।',
   'Click the aircraft, click its radar track, or press O as soon as you see movement. Timing counts from arrival.': 'हलचल दिखते ही विमान या उसके रडार ट्रैक पर क्लिक करें, या O दबाएँ। समय आगमन से गिना जाता है।',
   'The EO/IR sensor slews to the track. Compare shape, motion, lights and heat, then classify with 1–3.': 'EO/IR सेंसर ट्रैक की ओर घूमता है। आकार, गति, लाइट और ऊष्मा की तुलना करें, फिर 1–3 से वर्गीकृत करें।',
