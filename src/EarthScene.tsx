@@ -85,7 +85,7 @@ export default function EarthScene(props: Props) {
     setHelp(false);
     try { sessionStorage.setItem('aeron-gesture-guide-v2', 'seen'); } catch { /* Guide remains usable without storage. */ }
   };
-  const openHelp = () => { props.onTutorialOpen(); setHelp(true); };
+  const openHelp = () => { navigation.current?.cancel(); props.onTutorialOpen(); setHelp(true); };
   current.current = props;
 
   useEffect(() => {
@@ -211,7 +211,7 @@ export default function EarthScene(props: Props) {
     home.current=()=>{
       navigation.current?.cancel();viewer.camera.cancelFlight();interacted.current=true;
       previousView.current='overview';
-      frameCamera(viewer, current.current.theatre, 'overview', groundHeight.current, 0);updateCamera();current.current.onHome();
+      frameCamera(viewer, current.current.theatre, 'overview', groundHeight.current, .6);updateCamera();current.current.onHome();
     };
     navigation.current=attachEarthNavigation(viewer,{
       input:()=>current.current.input,
@@ -289,6 +289,7 @@ export default function EarthScene(props: Props) {
     frameCamera(viewer, current.current.theatre, props.cameraView, groundHeight.current, .8);
   },[props.cameraView]);
   useEffect(() => { if (help) current.current.onTutorialOpen(); }, [help]);
+  useEffect(() => { navigation.current?.cancel(); }, [props.input]);
   useEffect(() => {
     const viewer=viewerRef.current;if(!viewer)return;
     viewer.resolutionScale=props.highQuality?1:.85;

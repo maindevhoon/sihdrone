@@ -59,7 +59,7 @@ export default function GestureTutorial({ input, onClose }: Props) {
     </article>)}</div>
     <div className="gesture-extra">
       <p>{trackpad ? <><kbd>Shift</kbd> + two-finger scroll also pans. Safari supports a two-finger twist to rotate.</> : <><kbd>Shift</kbd> + scroll also rotates and tilts.</>}</p>
-      <p>{trackpad ? 'Moving one finger without clicking only moves the pointer. Keep gestures over the map.' : 'Keep the pointer over the map while navigating.'} Use <b>N</b> to face north, <b>2D</b> for top-down, or <b>Home</b> to return to the theatre site.</p>
+      <p>{trackpad ? 'Moving one finger without clicking only moves the pointer. Keep gestures over the map.' : 'Keep the pointer over the map while navigating.'} Small movements are enough; the map eases to a stop. Use <b>N</b> to face north, <b>2D</b> for top-down, or <b>Home</b> to return to the theatre site.</p>
     </div>
     <footer className="gesture-tutorial-foot"><span>Reopen this guide with the ? button on the map.</span><button className="primary-button" onClick={onClose}>Got it — try gestures</button></footer>
   </dialog>;
