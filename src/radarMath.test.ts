@@ -35,3 +35,18 @@ test('scope inspection follows heading and excludes returns outside the selected
   assert.equal(pickRadarContact(contacts,[120,32],30,90),null);
   assert.equal(pickRadarContact([], [120,32],60),null);
 });
+
+test('moving the observer updates projection, range, bearing, trails and scope picking together',()=>{
+  const scenario=createScenario('mixed',100,'guided',false),time=scenario.arrival+8;
+  const contact=visibleContacts(scenario,time)[0],observer:[number,number,number]=[contact.position[0]-10,0,contact.position[2]];
+  const readout=contactReadout(scenario,time,contact.id,8,observer);
+  assert.ok(Math.abs(readout.range-80)<1e-9);assert.equal(readout.bearing,90);
+  assert.equal(readout.speed,contactReadout(scenario,time,contact.id,8).speed);
+  assert.equal(readout.altitude,contactReadout(scenario,time,contact.id,8).altitude);
+  const point=projectContact(contact.position,60,90,observer);
+  assert.ok(Math.abs(point[0]-120)<1e-9);assert.ok(Math.abs(point[1]-(120-88/6))<1e-9);
+  assert.deepEqual(contactTrail(scenario,time,contact.id,60,90,observer).at(-1),point);
+  assert.equal(pickRadarContact([contact],point,60,90,10,observer),contact.id);
+  const farObserver:[number,number,number]=[observer[0]-1000,0,observer[2]];
+  assert.equal(pickRadarContact([contact],point,60,90,10,farObserver),null);
+});

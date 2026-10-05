@@ -269,6 +269,7 @@ kbd{font-family:var(--mono);font-size:10px;line-height:1;color:var(--text-2);bac
 .radar-empty{position:absolute;left:0;right:0;top:64%;text-align:center;font-size:9px;letter-spacing:2.5px;color:#4f8c6c;pointer-events:none;animation:blink 2s ease-in-out infinite}
 .radar-mfd[data-paused=true] .radar-empty{animation:none}
 .radar-heading{position:absolute;left:6px;bottom:5px;font-size:9px;color:#9bd2b3;letter-spacing:.6px}
+.radar-origin{position:absolute;right:6px;bottom:5px;font-size:7px;color:#89a99a;letter-spacing:.4px}
 .radar-track-data{display:grid;grid-template-columns:.8fr 1.5fr 1fr 1.1fr;gap:1px;margin:0;background:#22332c;border:1px solid #22332c;border-top:0}
 .radar-track-data div{background:#081110;padding:4px 6px;min-width:0}
 .radar-track-data dt{font-size:8.5px;letter-spacing:1px;color:#5f8a74}

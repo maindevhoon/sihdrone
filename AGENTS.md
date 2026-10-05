@@ -79,7 +79,7 @@ node --import tsx scripts/create-contact-models.mjs
 ## Rendering and radar
 
 - Preserve the local training scene and the Earth view. Keep heavy renderer code lazy-loaded, bound resource usage, and dispose of WebGL resources, controls, event handlers, and textures when appropriate. Check lifecycle changes under React StrictMode.
-- The simulation uses `[x, y, z]`, with `y` as altitude. Radar uses an observer at `[0, 0, 12]`. Earth mode maps each training unit to eight metres; the local scene uses one. Keep projection, range rings, trails, and numeric readouts consistent with the selected scale.
+- The simulation uses `[x, y, z]`, with `y` as altitude. The local radar observer is `[0, 0, 12]`. Earth mode translates that observer with the map reticle on the exercise airspace plane (`earthRadarObserver.ts`), keeping altitude relative to the airspace datum. Pass the shared observer to radar projection, range filtering, trails, picking, readouts, EO/IR and rotor range. Earth mode maps each training unit to eight metres; the local scene uses one. Camera navigation changes viewpoint even on a held clock; it must never change contact motion or saved results.
 - Radar heading-up mode rotates the projection using camera heading. Preserve range when rotating, count out-of-range contacts accurately, and never clamp them to misleading positions on the scope.
 - Airframe dimensions must stay within 2% of the published envelope in `airframes.ts`; cite the source when adding an airframe and only display published figures. Regenerate the GLBs after geometry changes.
 - Thermal views are display approximations; do not describe them as radiometric or validated sensor output.
