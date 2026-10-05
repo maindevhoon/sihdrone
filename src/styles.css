@@ -238,7 +238,7 @@ kbd{font-family:var(--mono);font-size:10px;line-height:1;color:var(--text-2);bac
 .radar-mfd{--track:var(--warn);font-family:var(--mono);color:#7fd7a8;background:linear-gradient(160deg,#1b2422,#0f1515);border:1px solid #33433d;border-radius:7px;padding:7px;box-shadow:inset 0 0 0 1px #0a0f0f,0 8px 26px #0006}
 .radar-mfd.identity-suspect{--track:var(--danger)}
 .radar-mfd.identity-neutral{--track:var(--ok)}
-.radar-header{display:flex;justify-content:space-between;align-items:center;padding:2px 4px 6px;font-size:9.5px;letter-spacing:1.1px;color:#a9bdb4}
+.radar-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:3px 8px;padding:2px 4px 6px;font-size:9.5px;letter-spacing:1.1px;color:#a9bdb4}
 .radar-state{font-size:9.5px;color:#89a99a}
 .radar-state.radar-live{color:#adffd0}
 .radar-controls{display:flex;align-items:center;gap:4px;padding:4px;background:#060c0c;border:1px solid #22332c;border-bottom:0;border-radius:4px 4px 0 0}
@@ -257,10 +257,17 @@ kbd{font-family:var(--mono);font-size:10px;line-height:1;color:var(--text-2);bac
 .radar-track{color:var(--track)}
 .radar-track.active-track circle{opacity:.22}
 .radar-trail{color:var(--track)}
-.radar-hit{position:absolute;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;padding:0;cursor:crosshair}
-.radar-hit:hover,.radar-hit:focus-visible{background:#ffffff14;outline:1px solid var(--track)}
-.radar-hit:active{transform:translate(-50%,-50%)!important}
+.radar-scope svg{cursor:crosshair}
+.radar-preview{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;padding:5px;background:#081110;border:1px solid #22332c;border-bottom:0;font-size:9px;color:#89a99a}
+.radar-preview button{display:flex;align-items:center;gap:5px;padding:4px 6px;border:1px solid #3f7657;border-radius:3px;color:#c4ffdc;font-family:var(--mono);font-size:9px}
+.radar-preview button svg{width:12px;filter:none}
+.radar-track-picker{display:flex;flex-wrap:wrap;gap:4px;max-height:84px;overflow:auto;padding:5px;background:#081110;border:1px solid #22332c;border-top:0}
+.radar-track-picker button{display:flex;align-items:center;gap:4px;min-width:42px;min-height:26px;padding:4px 6px;border:1px solid #2a4537;border-radius:3px;font-family:var(--mono);font-size:10px;color:#86b99a}
+.radar-track-picker button[aria-pressed=true]{color:var(--track);border-color:var(--track);background:#16291e}
+.radar-track-picker button.outside-range{border-style:dashed}
+.radar-track-picker button small{font-size:8px}
 .radar-empty{position:absolute;left:0;right:0;top:64%;text-align:center;font-size:9px;letter-spacing:2.5px;color:#4f8c6c;pointer-events:none;animation:blink 2s ease-in-out infinite}
+.radar-mfd[data-paused=true] .radar-empty{animation:none}
 .radar-heading{position:absolute;left:6px;bottom:5px;font-size:9px;color:#9bd2b3;letter-spacing:.6px}
 .radar-track-data{display:grid;grid-template-columns:.8fr 1.5fr 1fr 1.1fr;gap:1px;margin:0;background:#22332c;border:1px solid #22332c;border-top:0}
 .radar-track-data div{background:#081110;padding:4px 6px;min-width:0}
@@ -273,6 +280,7 @@ kbd{font-family:var(--mono);font-size:10px;line-height:1;color:var(--text-2);bac
 /* When the radar is drawn inside a scene (replay), it floats over the bottom-right corner. */
 .scene>.radar-mfd{position:absolute;right:12px;bottom:12px;width:224px;z-index:4}
 .replay-scene>.radar-mfd{width:204px}
+.replay-scene>.radar-mfd .radar-track-data{grid-template-columns:1fr 1.4fr}
 .replay-scene .scene-bottom{display:none}
 .replay-scene .camera-presets{top:auto;bottom:12px;right:auto;left:50%;transform:translateX(-50%)}
 .radar-header span,.radar-controls>button,.radar-track-data dt,.radar-footer span{white-space:nowrap}

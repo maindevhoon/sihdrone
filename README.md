@@ -105,7 +105,9 @@ The app draws its own site marker and does not overlay third-party boundary or p
 
 ## Radar and variation library
 
-The radar is a cockpit-inspired synthetic situation display, with adjustable range (30/60/120 training units), north-up or camera-heading-up orientation, contact trails, track identifiers, and bearing/range/relative-altitude/speed readouts. Units scale to Earth mode metres. Click a return to inspect its track; during a live exercise this also records an observation. The sweep, trails and readouts follow the exercise clock and freeze on pause. Returns outside the chosen range are counted rather than drawn at a false position.
+The radar is a cockpit-inspired synthetic situation display, with adjustable range (30/60/120 training units), north-up or camera-heading-up orientation, contact trails, track identifiers, and bearing/range/relative-altitude/speed readouts. Units scale to Earth mode metres. Click a return or a numbered track button to inspect it and cue EO/IR; during a live exercise this also records an observation. Scope clicks choose the nearest return, and the track buttons let you select individual contacts in a tightly spaced group. Returns outside the chosen range are counted rather than drawn at a false position; their track buttons remain available and are marked OUT.
+
+Before starting, unscored preview playback animates the scene, radar and cued sensor from one looping clock. Use **Pause sample / Play sample** on the radar to hold or resume it. Starting an exercise resets its clock to zero; preview inspection never records an observation, classification or result. Exercise and replay sweeps, trails and readouts follow their respective clocks and freeze on hold. Hidden tabs do not advance the preview.
 
 Visual reference: the range rings, heading references, ownship indicator and multifunction-display framing of [Falcon BMS's F-16 situation display](https://cdn.falcon-bms.com/docs/4.38/TO%201F-16CMAM-34-1-1%20BMS.pdf). The app uses an illustrative PPI layout with synthetic ground-relative returns; it does not reproduce an operational fighter radar or sensor physics.
 

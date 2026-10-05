@@ -17,7 +17,7 @@ class SceneBoundary extends Component<{children:ReactNode;label:string},{failed:
   static getDerivedStateFromError(){return {failed:true};}
   render(){return this.state.failed?<div className="canvas-error"><Focus size={28}/><h3>{this.props.label} unavailable</h3><p>Enable hardware acceleration in your browser.</p></div>:this.props.children;}
 }
-type Props = { scenario:Scenario; time:MutableRefObject<number>; displayTime:number; selected:boolean; phase:'preview'|'running'|'paused'|'replay'; cameraView:CameraView; onCameraChange:(view:CameraView)=>void; onSelect:()=>void; onResume?:()=>void; onPause?:()=>void; onNotice?:(notice:string)=>void; radarTarget?:HTMLElement|null; assessment?:Category|''; theatre:Theatre; onTheatreChange:(id:TheatreId)=>void };
+type Props = { scenario:Scenario; time:MutableRefObject<number>; displayTime:number; selected:boolean; phase:'preview'|'running'|'paused'|'replay'; cameraView:CameraView; onCameraChange:(view:CameraView)=>void; onSelect:()=>void; onResume?:()=>void; onPause?:()=>void; previewPlaying?:boolean; onTogglePreview?:()=>void; replayPlaying?:boolean; onNotice?:(notice:string)=>void; radarTarget?:HTMLElement|null; assessment?:Category|''; theatre:Theatre; onTheatreChange:(id:TheatreId)=>void };
 type ThermalPalette='white'|'black'|'iron';
 const paletteLabels:Record<ThermalPalette,string>={white:'White hot',black:'Black hot',iron:'Ironbow'};
 const zoomLevels=[{factor:6,label:'WFOV'},{factor:2.5,label:'MFOV'},{factor:1,label:'NFOV'}];
@@ -29,7 +29,7 @@ function HeadingTape({bearing}:{bearing:number}) {
     <strong>{bearing.toString().padStart(3,'0')}°</strong>
   </div>;
 }
-export default function SceneView({scenario,time,displayTime,selected,phase,cameraView,onCameraChange,onSelect,onResume,onPause,onNotice,radarTarget,assessment='',theatre,onTheatreChange}:Props) {
+export default function SceneView({scenario,time,displayTime,selected,phase,cameraView,onCameraChange,onSelect,onResume,onPause,previewPlaying=false,onTogglePreview,replayPlaying=false,onNotice,radarTarget,assessment='',theatre,onTheatreChange}:Props) {
   const [bearing,setBearing]=useState(0);
   const world=isGeographic(theatre)?'earth':'training';
   const [earthStatus,setEarthStatus]=useState('Loading satellite imagery and 3D terrain…');
@@ -98,7 +98,7 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
   const views=(['overview','rooftop','street'] as CameraView[]).map(id=>({id,label:cameraLabels[theatre.kind][id]}));
   const coordinates=theatre.latitude!==undefined&&theatre.longitude!==undefined?`${theatre.latitude.toFixed(4)}° N  ${theatre.longitude.toFixed(4)}° E`:'';
   const stateLabel=phase==='running'?'LIVE':phase==='paused'?'HOLD':phase==='replay'?'REPLAY':'PREVIEW';
-  const radar=<Radar scenario={scenario} time={displayTime} selected={selected} paused={phase==='paused'||phase==='preview'} preview={phase==='preview'} replay={phase==='replay'} bearing={bearing} metresPerUnit={metresPerUnit} track={track} assessment={assessment} onTrack={id=>{setTrack(id);setSensorCue(true);setSensorOpen(true);}} onSelect={onSelect}/>;
+  const radar=<Radar scenario={scenario} time={displayTime} selected={selected} paused={phase==='paused'||(phase==='preview'&&!previewPlaying)||(phase==='replay'&&!replayPlaying)} preview={phase==='preview'} replay={phase==='replay'} onTogglePreview={onTogglePreview} bearing={bearing} metresPerUnit={metresPerUnit} track={track} assessment={assessment} onTrack={id=>{setTrack(id);setSensorCue(true);setSensorOpen(true);}} onSelect={onSelect}/>;
   const trackLabel=`T${(Math.min(track,scenario.count-1)+1).toString().padStart(2,'0')}`;
   return <div ref={sceneRef} className={`scene ${phase==='replay'?'replay-scene':''} world-${world}`}>
     <svg className="filter-defs" aria-hidden><filter id="thermal-iron" colorInterpolationFilters="sRGB"><feComponentTransfer><feFuncR type="table" tableValues="0 .25 .62 .9 1 1"/><feFuncG type="table" tableValues="0 0 .08 .38 .76 1"/><feFuncB type="table" tableValues="0 .42 .5 .08 0 .85"/></feComponentTransfer></filter></svg>

@@ -4,6 +4,16 @@ export function projectContact([x,,z]:Position,range:number,heading=0):[number,n
   const y=z-12,a=heading*Math.PI/180,scale=SCOPE_RADIUS/range;
   return [SCOPE_CENTER+(x*Math.cos(a)+y*Math.sin(a))*scale,SCOPE_CENTER+(y*Math.cos(a)-x*Math.sin(a))*scale];
 }
+/** Resolve clustered scope hits by distance instead of HTML button stacking order. */
+export function pickRadarContact(contacts: {id:number;position:Position}[],point:[number,number],range:number,heading=0,tolerance=10):number|null {
+  let nearest:number|null=null,distance=tolerance;
+  for(const {id,position} of contacts){
+    if(Math.hypot(position[0],position[2]-12)>range)continue;
+    const [x,y]=projectContact(position,range,heading),delta=Math.hypot(x-point[0],y-point[1]);
+    if(delta<=distance){nearest=id;distance=delta;}
+  }
+  return nearest;
+}
 export function contactReadout(scenario:Scenario,time:number,id:number,metresPerUnit=1) {
   const p=contactPosition(scenario,time,id),previous=contactPosition(scenario,Math.max(scenario.arrival,time-.25),id);
   const delta=Math.min(.25,Math.max(0,time-scenario.arrival));

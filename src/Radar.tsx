@@ -1,10 +1,11 @@
 import { useId, useState } from 'react';
-import { visibleContacts, type Category, type Scenario } from './simulation';
-import { contactReadout, contactTrail, projectContact, SCOPE_CENTER as C, SCOPE_RADIUS as R } from './radarMath';
-type Props={scenario:Scenario;time:number;selected:boolean;paused:boolean;preview?:boolean;replay?:boolean;bearing?:number;metresPerUnit?:number;track:number;assessment?:Category|'';onTrack:(id:number)=>void;onSelect?:()=>void};
+import { Pause, Play } from 'lucide-react';
+import { formatTime, visibleContacts, type Category, type Scenario } from './simulation';
+import { contactReadout, contactTrail, pickRadarContact, projectContact, SCOPE_CENTER as C, SCOPE_RADIUS as R } from './radarMath';
+type Props={scenario:Scenario;time:number;selected:boolean;paused:boolean;preview?:boolean;replay?:boolean;onTogglePreview?:()=>void;bearing?:number;metresPerUnit?:number;track:number;assessment?:Category|'';onTrack:(id:number)=>void;onSelect?:()=>void};
 // Track identity follows the operator's assessment, never the scenario's ground truth.
 const identity=(assessment:Category|'')=>assessment==='Bird'?{key:'neutral',label:'NEUTRAL · BIO'}:assessment?{key:'suspect',label:`SUSPECT · ${assessment==='Drone group'?'UAS GRP':'UAS'}`}:{key:'unknown',label:'UNKNOWN'};
-export default function Radar({scenario,time,selected,paused,preview=false,replay=false,bearing=0,metresPerUnit=1,track,assessment='',onTrack,onSelect}:Props) {
+export default function Radar({scenario,time,selected,paused,preview=false,replay=false,onTogglePreview,bearing=0,metresPerUnit=1,track,assessment='',onTrack,onSelect}:Props) {
   const uid=useId().replaceAll(':','');
   const [range,setRange]=useState(60);
   const [headingUp,setHeadingUp]=useState(false);
@@ -15,14 +16,21 @@ export default function Radar({scenario,time,selected,paused,preview=false,repla
   const readout=contacts.length?contactReadout(scenario,time,activeId,metresPerUnit):null;
   const inRange=contacts.filter(({position})=>Math.hypot(position[0],position[2]-12)<=range);
   const rangeIndex=[30,60,120].indexOf(range);
-  const state=preview?'PREVIEW':replay?'REPLAY':paused?'HOLD':'LIVE';
+  const state=preview?(paused?'PREVIEW · HOLD':'PREVIEW · PLAY'):replay?(paused?'REPLAY · HOLD':'REPLAY'):paused?'HOLD':'LIVE';
   const trackLabel=`T${(activeId+1).toString().padStart(2,'0')}`;
   const id=identity(assessment);
-  return <div className={`radar-instrument radar-mfd identity-${id.key}`} aria-label={`Simulated radar. ${inRange.length} contacts in range. ${state}.`}>
+  function inspect(contact:number){onTrack(contact);if(!paused&&!preview&&!replay)onSelect?.();}
+  return <div className={`radar-instrument radar-mfd identity-${id.key}`} data-time={time} data-paused={paused} aria-label={`Simulated radar. ${inRange.length} contacts in range. ${state}.`}>
     <div className="radar-header"><span>PPI · SURVEILLANCE</span><span className={`radar-state ${paused?'':'radar-live'}`}>{state}</span></div>
     <div className="radar-controls"><button aria-label="Toggle radar orientation" aria-pressed={headingUp} onClick={()=>setHeadingUp(v=>!v)}>{headingUp?'HDG UP':'NORTH UP'}</button><button aria-label="Toggle radar trails" aria-pressed={trails} onClick={()=>setTrails(v=>!v)}>TRAIL</button><div className="radar-range-controls"><button aria-label="Decrease radar range" disabled={rangeIndex===0} onClick={()=>setRange([30,60,120][rangeIndex-1])}>−</button><span>{range*metresPerUnit}<small>m</small></span><button aria-label="Increase radar range" disabled={rangeIndex===2} onClick={()=>setRange([30,60,120][rangeIndex+1])}>+</button></div></div>
+    {preview&&onTogglePreview&&<div className="radar-preview"><button aria-label={paused?'Play radar preview':'Pause radar preview'} onClick={onTogglePreview}>{paused?<Play size={12}/>:<Pause size={12}/>} {paused?'Play sample':'Pause sample'}</button><span>{formatTime(time)} · UNSCORED</span></div>}
     <div className="radar-scope">
-      <svg viewBox="0 0 240 240" role="img" aria-label="Simulated radar scope with contact trails and bearing markings">
+      <svg viewBox="0 0 240 240" role="img" aria-label="Simulated radar scope with contact trails and bearing markings" onClick={event=>{
+        const bounds=event.currentTarget.getBoundingClientRect();
+        const point:[number,number]=[(event.clientX-bounds.left)*240/bounds.width,(event.clientY-bounds.top)*240/bounds.height];
+        const contact=pickRadarContact(contacts,point,range,orientation,Math.max(8,12*240/bounds.width));
+        if(contact!==null)inspect(contact);
+      }}>
         <defs><radialGradient id={`${uid}-glow`}><stop stopColor="#5ef0b0" stopOpacity=".07"/><stop offset="1" stopColor="#5ef0b0" stopOpacity="0"/></radialGradient><clipPath id={`${uid}-clip`}><circle cx={C} cy={C} r={R}/></clipPath></defs>
         <circle cx={C} cy={C} r={R} fill={`url(#${uid}-glow)`}/>
         {[R/3,R*2/3,R].map((r,i)=><g key={r}><circle cx={C} cy={C} r={r} fill="none" stroke="currentColor" strokeOpacity={i===2?.6:.22} strokeWidth=".7"/><text x={C+4} y={C-r+10} className="scope-range-label">{Math.round(range*(i+1)/3*metresPerUnit)}</text></g>)}
@@ -52,10 +60,13 @@ export default function Radar({scenario,time,selected,paused,preview=false,repla
         </g>
         <g transform={`rotate(${bearing-orientation} ${C} ${C})`}><path d="M120 114l-4 10 4-2 4 2Z" fill="#e3ffec"/><path d="M112 128h16" stroke="#e3ffec" strokeWidth="1"/></g>
       </svg>
-      {inRange.map(({id:contact,position})=>{const [x,y]=projectContact(position,range,orientation);return <button key={contact} className="radar-hit" style={{left:`${x/2.4}%`,top:`${y/2.4}%`}} aria-label={`Inspect radar track ${contact+1}`} title={`Inspect track ${contact+1} and slew the EO sensor`} onClick={()=>{onTrack(contact);if(!paused&&!preview&&!replay)onSelect?.();}}/>;})}
-      {!contacts.length&&<span className="radar-empty">SCANNING</span>}
+      {!inRange.length&&<span className="radar-empty">{contacts.length?'NO RETURNS IN RANGE':'SCANNING'}</span>}
       <span className="radar-heading">HDG {bearing.toString().padStart(3,'0')}°</span>
     </div>
+    {contacts.length>0&&<div className="radar-track-picker" role="group" aria-label="Radar tracks">{contacts.map(({id:contact,position})=>{
+      const outside=Math.hypot(position[0],position[2]-12)>range;
+      return <button key={contact} aria-label={`Inspect radar track ${contact+1}`} aria-pressed={contact===activeId} className={outside?'outside-range':''} title={`Slew EO/IR to track ${contact+1}${outside?' (outside scope range)':''}`} onClick={()=>inspect(contact)}>T{(contact+1).toString().padStart(2,'0')}{outside&&<small>OUT</small>}</button>;
+    })}</div>}
     <dl className="radar-track-data">
       <div><dt>TRK</dt><dd>{readout?trackLabel:'—'}</dd></div>
       <div><dt>BRG / RNG</dt><dd>{readout?`${Math.round(readout.bearing).toString().padStart(3,'0')}°/${Math.round(readout.range)}m`:'NO RTN'}</dd></div>
