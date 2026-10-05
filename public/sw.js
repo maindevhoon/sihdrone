@@ -1,5 +1,5 @@
-// Aeron service worker: offline shell and cached build assets. Bump VERSION when this logic changes.
-const VERSION = 'aeron-v2';
+// Trinetra service worker: offline shell and cached build assets. Bump VERSION when this logic changes.
+const VERSION = 'trinetra-v3';
 const SHELL = ['/', '/favicon.svg', '/manifest.webmanifest', '/models/bird.glb',
   ...['mavic-3', 'phantom-4-pro', 'matrice-350-rtk', 'mini-4-pro'].map(id => `/models/drone-${id}.glb`)];
 self.addEventListener('install', event => {

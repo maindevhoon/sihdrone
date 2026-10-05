@@ -44,7 +44,7 @@ export default function Progress({ history, profile, onProfile, onOpenSession, o
   function exportCsv() {
     const url = URL.createObjectURL(new Blob([historyCsv(history)], { type: 'text/csv' }));
     const link = document.createElement('a'); link.href = url;
-    link.download = `aeron-training-record${profile.name ? `-${profile.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}` : ''}.csv`;
+    link.download = `trinetra-training-record${profile.name ? `-${profile.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}` : ''}.csv`;
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const level = summary.readiness.level;

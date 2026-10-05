@@ -1,4 +1,6 @@
-# Aeron — Airspace observation trainer
+# Trinetra (त्रिनेत्र) — Airspace observation trainer
+
+Trinetra was previously named Aeron. Browser storage keys keep the `aeron-` prefix so existing results and settings carry over.
 
 A React + Three.js prototype for the recognition and after-action-review portion of SIH26247. It is laid out as an operations console: mission setup on the left, the sensor view in the centre, and a situation panel (simulated radar, observation, classification and recognition cues) on the right. The fictional district takes visual cues from Delhi; it is not a geographic reconstruction.
 

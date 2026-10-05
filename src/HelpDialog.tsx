@@ -25,9 +25,9 @@ export default function HelpDialog({ welcome, onClose }: { welcome: boolean; onC
   }, [onClose]);
   return <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="help-title">
-      <header><div><div className="eyebrow">{t(welcome ? 'WELCOME TO AERON' : 'OPERATOR GUIDE')}</div><h2 id="help-title">{t(welcome ? 'Detect, observe, identify, debrief' : 'Procedure and shortcuts')}</h2></div>
+      <header><div><div className="eyebrow">{t(welcome ? 'WELCOME TO TRINETRA' : 'OPERATOR GUIDE')}</div><h2 id="help-title">{t(welcome ? 'Detect, observe, identify, debrief' : 'Procedure and shortcuts')}</h2></div>
         <button ref={close} className="icon-button" aria-label={t('Close')} onClick={onClose}><X size={16} /></button></header>
-      {welcome && <p className="dialog-lead">{t('Aeron trains low-altitude aerial observation. Each 45-second exercise brings drones, drone groups or black kites; your job is to notice them early and identify them correctly.')}</p>}
+      {welcome && <p className="dialog-lead">{t('Trinetra trains low-altitude aerial observation. Each 45-second exercise brings drones, drone groups or black kites; your job is to notice them early and identify them correctly.')}</p>}
       <ol className="dialog-steps">{steps.map(({ icon: Icon, title, text }) => <li key={title}><span><Icon size={17} /></span><div><strong>{t(title)}</strong><p>{t(text)}</p></div></li>)}</ol>
       <h3 className="section-label">{t('KEYBOARD')}</h3>
       <dl className="shortcut-list">{shortcuts.map(([keys, label]) => <div key={keys}><dt>{keys.split(' · ').map(k => <kbd key={k}>{k}</kbd>)}</dt><dd>{t(label).replace(' (key)', '')}</dd></div>)}</dl>

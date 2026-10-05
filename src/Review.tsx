@@ -36,7 +36,7 @@ export default function Review({session,history,profile,theatre,onTheatreChange,
   const definition=exercises.find(e=>e.id===session.scenario.exercise)!;
   const reaction=session.observationValid?session.detection!-session.scenario.arrival:null;
   const airframe=airframeFor(session.scenario);
-  function exportSession(){const file=new Blob([JSON.stringify(session,null,2)],{type:'application/json'});const url=URL.createObjectURL(file);const link=document.createElement('a');link.href=url;link.download=`aeron-session-${session.scenario.seed}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+  function exportSession(){const file=new Blob([JSON.stringify(session,null,2)],{type:'application/json'});const url=URL.createObjectURL(file);const link=document.createElement('a');link.href=url;link.download=`trinetra-session-${session.scenario.seed}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   return <div className="review-panel">
     <div className="review-heading"><span className="review-icon"><Flag size={24}/></span><div><div className="eyebrow">{t('AFTER-ACTION REVIEW')}</div><h2>{t('Debrief')}: {t(definition.short)}</h2></div><span className="tag">{session.scenario.dusk?'DUSK':'DAYLIGHT'}</span></div>
     <div className="print-only print-meta">Trainee: {profile.name||'—'} · Unit/ID: {profile.unit||'—'} · Session {new Date(session.createdAt).toLocaleString()} · Printed {new Date().toLocaleString()}</div>

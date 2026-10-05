@@ -1,6 +1,6 @@
 {
-  "name": "Aeron — Airspace observation trainer",
-  "short_name": "Aeron",
+  "name": "Trinetra — Airspace observation trainer",
+  "short_name": "Trinetra",
   "description": "Practise detecting and identifying drones, drone groups and birds with simulated radar and an EO/IR sensor, then review every session.",
   "start_url": "/",
   "scope": "/",

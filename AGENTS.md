@@ -1,10 +1,10 @@
-# Agent guide — Aeron
+# Agent guide — Trinetra
 
 This file applies to the entire repository. Follow the user's current request and keep changes focused on it.
 
 ## Project
 
-Aeron is the SIH26247 drone-observation prototype: choose a scenario, observe and classify synthetic aerial objects, then review the recorded session. The interface uses React, TypeScript, and Vite. Three.js/React Three Fiber render the local Delhi-inspired district; Cesium renders the geographic Earth view.
+Trinetra (त्रिनेत्र, formerly Aeron) is the SIH26247 drone-observation prototype: choose a scenario, observe and classify synthetic aerial objects, then review the recorded session. The interface uses React, TypeScript, and Vite. Three.js/React Three Fiber render the local Delhi-inspired district; Cesium renders the geographic Earth view.
 
 - Repository: https://github.com/maindevhoon/sihdrone
 - Production: https://sihdrone.vercel.app
@@ -67,7 +67,7 @@ node --import tsx scripts/create-contact-models.mjs
 - Keep scenario generation, positions, and scoring deterministic for a given scenario version, seed, and simulation time. Randomness belongs in scenario/deck creation, never in frame rendering or replay.
 - Use `contactPosition` and `visibleContacts` (and `contactKinematics`, derived from them) as the shared source for both renderers, the sensor feed, radar, and replay. Contact models are real size in metres; Earth view scales positions, not models. Support the full generated contact count in every view; do not assume a fixed maximum from one sample scenario.
 - The scenario format currently supports versions 1 and 2. Preserve the version-1 path when loading or repeating older records. If generation or motion semantics change, version them explicitly and update validation and compatibility tests.
-- The session format is separately versioned at 1, with storage key `aeron-sessions-v1`. Storage validates regenerated scenario fields and recomputed scores. Update these together when changing the schema or scoring, with an explicit migration/compatibility decision.
+- The session format is separately versioned at 1, with storage key `aeron-sessions-v1`. All `aeron-*` storage keys predate the rename to Trinetra; keep them unchanged so saved results and preferences survive. Storage validates regenerated scenario fields and recomputed scores. Update these together when changing the schema or scoring, with an explicit migration/compatibility decision.
 - Keep the 200 numbered seed entries stable. Shuffle should cover a complete cycle without repeats and avoid repeating the current seed at a cycle boundary. Display the full seed so a variation can be reproduced.
 - All motion, radar trails, sweep animation, and recorded events use the exercise clock. Pause must freeze simulation time. An active exercise pauses when the document becomes hidden.
 - Observation time must fall after contact arrival and before the session ends to earn credit. Classification credit requires a valid observation.
