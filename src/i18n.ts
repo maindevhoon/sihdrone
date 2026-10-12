@@ -12,7 +12,7 @@ const hi: Record<string, string> = {
   // Mission setup
   'MISSION SETUP': 'मिशन सेटअप', 'GUIDED': 'मार्गदर्शित', 'CHALLENGE': 'चुनौती', 'THEATRE': 'क्षेत्र', 'EXERCISE': 'अभ्यास',
   'DIFFICULTY': 'कठिनाई', 'LIGHTING': 'प्रकाश', 'VARIATION': 'संस्करण', 'PROCEDURE': 'प्रक्रिया',
-  'Guided': 'मार्गदर्शित', 'Challenge': 'चुनौती', 'Day': 'दिन', 'Dusk': 'संध्या', 'Shuffle': 'बदलें',
+  'Guided': 'मार्गदर्शित', 'Challenge': 'चुनौती', 'Day': 'दिन', 'Dusk': 'संध्या', 'Night': 'रात', 'Fog': 'कोहरा', 'VISIBILITY': 'दृश्यता', 'Urban haze': 'शहरी धुंध', 'Shuffle': 'बदलें',
   'Area': 'क्षेत्र', 'Window': 'अवधि', 'Visibility': 'दृश्यता', 'Sensors': 'सेंसर', 'Training district': 'प्रशिक्षण ज़िला',
   'Light urban haze': 'हल्की शहरी धुंध', 'Dense urban haze': 'घनी शहरी धुंध',
   'Detect': 'पता लगाएँ', 'Observe': 'अवलोकन', 'Identify': 'पहचानें',

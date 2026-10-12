@@ -1,17 +1,20 @@
 import {
   CanvasTexture, CircleGeometry, Color, FrontSide, CylinderGeometry, DoubleSide, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial,
   MeshStandardMaterial, Points, PointsMaterial, BufferGeometry, Shape, ShapeGeometry, SphereGeometry, SRGBColorSpace,
-  Vector2, Vector3, type Material, type Side, type Object3D,
+  Vector2, Vector3, ExtrudeGeometry, BoxGeometry, type Material, type Side, type Object3D,
 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { birdAttitude, droneAttitude, strobeOn, wingBeat, type Kinematics } from './kinematics';
 import { AIRFRAMES, type Airframe } from './airframes';
+import { BIRDS } from './birds';
+import type { FlightModelId, FlightState } from './flightTypes';
 
 // Contact models in real-world metres (one local training unit), nose along +Z and up along +Y.
 // The same builders feed the training scene, the EO/IR sensor feed and the exported Earth-view GLBs.
 export type ContactPalette = 'visible' | 'thermal';
 type Swatch = { color: number; metalness?: number; roughness?: number; opacity?: number; side?: Side };
-type Rig = { props: Object3D[]; wings: Object3D[]; tail?: Object3D; strobe?: Object3D };
+type Rig = { props: Object3D[]; wings: Object3D[]; elbows?:Object3D[]; wrists?:Object3D[]; surfaces?:Object3D[]; tail?: Object3D; strobe?: Object3D };
 const rigs = new WeakMap<Object3D, Rig>();
 
 /** Visible-band PBR material, or a flat grey level for the white-hot thermal palette (heat 0 cold → 1 hot). */
@@ -155,11 +158,124 @@ export function createBirdModel({ palette = 'visible' }: { palette?: ContactPale
   return root;
 }
 
+/** Original articulated assets. The v1/v2 builders above stay frozen for old replays. */
+export function createFlightModel(id:FlightModelId,palette:ContactPalette='visible',lowLight=false,lights=true,detail:'high'|'low'='high'):Group {
+  if(id in BIRDS){const bird=createArticulatedBird(id as keyof typeof BIRDS,palette,detail==='high');mergeStaticMeshes(bird);return bird;}
+  const a=AIRFRAMES[id as keyof typeof AIRFRAMES];
+  if(a.fixedWing)return createPlaneModel(palette);
+  const root=createDroneModel({airframe:a,palette,dusk:lowLight,lights});
+  if(detail==='low'){mergeStaticMeshes(root);return root;}
+  const shell=material(palette,{color:a.livery==='white'?0xe1e6ea:0x363d45,metalness:.3,roughness:.32},.6);
+  const dark=material(palette,{color:0x10151b,roughness:.55},.75);
+  // Recessed vents, camera optics, battery seams and screw heads inside the size envelope.
+  for(const side of [-1,1])for(let i=0;i<5;i++){
+    const vent=add(root,new BoxGeometry(.0015,a.body.height*.08,a.body.length*.026),dark,[side*a.body.width*.455,0,a.body.z+(i-2)*a.body.length*.075]);
+    vent.rotation.z=side*.15;
+  }
+  add(root,new RoundedBoxGeometry(a.body.width*.63,.012,a.body.length*.47,2,.003),shell,[0,a.body.height*.42,a.body.z-a.body.length*.13],'battery-cover');
+  for(const [x,y,z] of a.motors){
+    add(root,new CylinderGeometry(.002,.002,.002,8),dark,[x,y+a.motorRadius*1.36,z]);
+    const led=add(root,new SphereGeometry(a.motorRadius*.13,6,4),material(palette,{color:x>0?0xef4038:0x4ff094},.5),[x,y-a.motorRadius*.5,z],'navigation-led');
+    if(led.material instanceof MeshStandardMaterial){led.material.emissive.setHex(x>0?0xef4038:0x4ff094);led.material.emissiveIntensity=lowLight?3:1;}
+  }
+  if(a.motors.length===6)rigs.get(root)?.props.forEach((p,i)=>{p.userData.spin=i%2?1:-1;});
+  mergeStaticMeshes(root);return root;
+}
+/** Merge only static meshes within a joint, preserving every animation group and material. */
+function mergeStaticMeshes(root:Object3D){
+  const groups:Object3D[]=[];root.traverse(o=>{if(o.type==='Group')groups.push(o);});
+  for(const group of groups){
+    const buckets=new Map<Material,Mesh[]>();
+    for(const child of group.children){const mesh=child as Mesh;if(!mesh.isMesh||Array.isArray(mesh.material))continue;const bucket=buckets.get(mesh.material)??[];bucket.push(mesh);buckets.set(mesh.material,bucket);}
+    for(const [mat,meshes] of buckets){
+      if(meshes.length<2)continue;
+      const copies=meshes.map(m=>{m.updateMatrix();const g=m.geometry.index?m.geometry.toNonIndexed():m.geometry.clone();return g.applyMatrix4(m.matrix);});
+      const merged=mergeGeometries(copies,false);copies.forEach(g=>g.dispose());if(!merged)continue;
+      const mesh=add(group,merged,mat,[0,0,0],'surface-detail');
+      mesh.castShadow=meshes.some(m=>m.castShadow);meshes.forEach(m=>{group.remove(m);});
+      const geometries=new Set(meshes.map(m=>m.geometry));geometries.forEach(g=>g.dispose());
+    }
+  }
+}
+function createArticulatedBird(id:keyof typeof BIRDS,palette:ContactPalette,detailed=true){
+  const b=BIRDS[id],root=new Group(),L=b.length,half=b.span/2;
+  root.name=`bird-${id}`;
+  const bodyMat=material(palette,{color:b.colors[0],roughness:.92},.9),wingMat=material(palette,{color:b.colors[1],roughness:.95},.72),headMat=material(palette,{color:b.colors[2],roughness:.75},.94);
+  const dark=material(palette,{color:0x131417,roughness:.65},.6);
+  const body=add(root,new SphereGeometry(1,24,14),bodyMat,[0,0,0],'body');body.scale.set(L*.12,L*.11,L*.26);
+  const neck=add(root,new SphereGeometry(1,16,10),headMat,[0,L*.035,L*.2],'neck');neck.scale.set(L*.075,L*.085,L*.13);
+  const head=add(root,new SphereGeometry(1,16,12),id==='house-crow'?dark:headMat,[0,L*.06,L*.31],'head');head.scale.set(L*.072,L*.075,L*.09);
+  const beak=add(root,new CylinderGeometry(0,L*.021,L*.13,10),dark,[0,L*.04,L*.43],'beak');beak.rotation.x=Math.PI/2+.12;
+  for(const side of [-1,1])add(root,new SphereGeometry(L*.012,8,6),dark,[side*L*.068,L*.075,L*.34],'eye');
+  const rig:Rig={props:[],wings:[],elbows:[],wrists:[]};
+  const widths=[(half-.025)*.43,(half-.025)*.35,(half-.025)*.22];
+  for(const side of [1,-1]){
+    const suffix=side===1?'left':'right',shoulder=new Group();shoulder.name=`wing-${suffix}`;shoulder.position.set(side*.025,L*.04,L*.025);root.add(shoulder);rig.wings.push(shoulder);
+    let parent=shoulder;
+    widths.forEach((width,j)=>{
+      if(j){const joint=new Group();joint.name=`${j===1?'elbow':'wrist'}-${suffix}`;joint.position.x=side*widths[j-1];parent.add(joint);parent=joint;(j===1?rig.elbows!:rig.wrists!).push(joint);}
+      const chord=L*(j===0?.42:j===1?.34:.26),taper=j===2?.45:.85;
+      const shape=new Shape([[0,chord*.4],[side*width,chord*.2],[side*width,-chord*taper],[0,-chord*.7]].map(([x,y])=>new Vector2(x,y)));
+      const geometry=new ExtrudeGeometry(shape,{depth:L*.008,bevelEnabled:false}).rotateX(Math.PI/2);
+      add(parent,geometry,wingMat,[0,0,0],`feather-cover-${suffix}-${j}`);
+      // Overlapping primary/secondary feathers give thickness, separation and a pointed tip.
+      for(let f=0;detailed&&f<6;f++){
+        const feather=add(parent,new SphereGeometry(1,8,6),f%2?wingMat:bodyMat,[side*width*(f+.5)/6,-L*.008,-chord*.56],`feather-${suffix}-${j}-${f}`);
+        feather.scale.set(width/13,L*.007,chord*(j===2?.32:.23));feather.rotation.y=-side*.18;
+      }
+      if(id==='rock-pigeon'&&j<2){const bar=add(parent,new BoxGeometry(width*.92,L*.006,L*.027),dark,[side*width*.5,L*.005,-chord*.15]);bar.rotation.y=side*.1;}
+    });
+  }
+  const tail=new Group();tail.name='tail';tail.position.set(0,-L*.015,-L*.2);root.add(tail);rig.tail=tail;
+  for(let i=0;i<7;i++){
+    const fork=id==='black-kite'?Math.abs(i-3)*L*.018:0;
+    const feather=add(tail,new SphereGeometry(1,10,6),i%2?wingMat:bodyMat,[(i-3)*L*.025,0,-L*.16-fork*.5]);
+    feather.scale.set(L*.025,L*.008,L*.12+fork*.5);feather.rotation.y=(i-3)*.065;
+  }
+  // Folded feet remain tucked beneath the body in flight.
+  for(const side of [-1,1])strut(root,new Vector3(side*L*.04,-L*.06,-L*.08),new Vector3(side*L*.035,-L*.12,-L*.17),L*.008,dark);
+  rigs.set(root,rig);return root;
+}
+function createPlaneModel(palette:ContactPalette){
+  const root=new Group();root.name='drone-rc-cessna';
+  const shell=material(palette,{color:0xdbe2e7,metalness:.12,roughness:.4},.5),carbon=material(palette,{color:0x222a32,roughness:.45},.45),glass=material(palette,{color:0x1c3544,metalness:.6,roughness:.15},.6);
+  const body=add(root,new SphereGeometry(1,28,16),shell,[0,0,0],'fuselage');body.scale.set(.07,.09,.675);
+  const cabin=add(root,new SphereGeometry(1,20,12),glass,[0,.065,.21]);cabin.scale.set(.063,.05,.15);
+  const rig:Rig={props:[],wings:[],surfaces:[]};
+  for(const side of [-1,1]){
+    const wingShape=new Shape([[side*.06,.25],[side*.9,.08],[side*.9,-.17],[side*.06,-.22]].map(([x,y])=>new Vector2(x,y)));
+    add(root,new ExtrudeGeometry(wingShape,{depth:.025,bevelEnabled:false}).rotateX(Math.PI/2),shell,[0,.05,0],'main-wing');
+    const aileron=new Group();aileron.name=side>0?'aileron-left':'aileron-right';aileron.position.set(side*.63,.048,-.16);root.add(aileron);
+    add(aileron,new BoxGeometry(.48,.018,.09),carbon,[0,0,-.035]);rig.surfaces!.push(aileron);
+  }
+  const elevator=new Group();elevator.name='elevator';elevator.position.set(0,.03,-.51);root.add(elevator);add(elevator,new BoxGeometry(.6,.018,.17),shell,[0,0,-.04]);rig.surfaces!.push(elevator);
+  const fin=add(root,new BoxGeometry(.015,.24,.17),shell,[0,.1,-.54],'vertical-fin');fin.rotation.x=-.18;
+  const rudder=new Group();rudder.name='rudder';rudder.position.set(0,.12,-.59);root.add(rudder);add(rudder,new BoxGeometry(.015,.21,.07),carbon,[0,0,-.03]);rig.surfaces!.push(rudder);
+  const prop=new Group();prop.name='prop-0';prop.position.z=.69;prop.userData.spin=1;root.add(prop);rig.props.push(prop);
+  add(prop,new BoxGeometry(.28,.014,.01),carbon);const disc=add(prop,new CircleGeometry(.14,24),material(palette,{color:0x222a32,opacity:.15,side:DoubleSide},.5));disc.castShadow=false;
+  rigs.set(root,rig);return root;
+}
+export function poseFlightRig(model:Object3D,flight:FlightState,time:number,index:number){
+  const rig=rigs.get(model);if(!rig)return;
+  rig.props.forEach((p,i)=>{
+    const angle=(flight.rotorAngles[i]??0)*(p.userData.spin as number);
+    if(model.name==='drone-rc-cessna')p.rotation.z=angle;else p.rotation.y=angle;
+    const disc=p.getObjectByName('prop-disc') as Mesh|undefined;
+    if(disc){disc.visible=(flight.rotorRPM[i]??0)>300;}
+  });
+  rig.wings.forEach((w,i)=>{w.rotation.z=(i? -1:1)*flight.wing.shoulder;});
+  rig.elbows?.forEach((w,i)=>{w.rotation.z=(i?-1:1)*flight.wing.elbow;});
+  rig.wrists?.forEach((w,i)=>{w.rotation.z=(i?-1:1)*flight.wing.wrist;});
+  if(rig.tail){rig.tail.rotation.x=flight.wing.tail;rig.tail.rotation.y=flight.angularVelocity[1]*.06;}
+  rig.surfaces?.forEach((s,i)=>{if(i<2)s.rotation.x=(i?-1:1)*flight.surfaces[2]*.3;else if(i===2)s.rotation.x=flight.surfaces[0]*.3;else s.rotation.y=flight.surfaces[1]*.3;});
+  if(rig.strobe)rig.strobe.visible=strobeOn(time,index);
+}
 /**
  * Orients a contact along its trajectory and animates propellers, strobe or wings.
  * `target` carries the position/attitude; `model` is the built airframe inside it.
  */
 export function poseContact(target: Object3D, model: Object3D, bird: boolean, k: Kinematics, time: number, index: number) {
+  if(k.flight){target.position.set(...k.flight.position);target.quaternion.set(...k.flight.orientation);poseFlightRig(model,k.flight,time,index);return;}
   const attitude = bird ? birdAttitude(k) : droneAttitude(k);
   target.position.set(...k.position);
   target.rotation.set(attitude.pitch, Math.PI - k.heading, attitude.roll, 'YXZ');
@@ -176,10 +292,12 @@ export function poseContact(target: Object3D, model: Object3D, bird: boolean, k:
 }
 
 export function disposeModel(object: Object3D) {
+  const geometries=new Set<BufferGeometry>(),materials=new Set<Material>();
   object.traverse(child => {
     const item = child as Mesh;
-    item.geometry?.dispose();
-    const materials = item.material ? (Array.isArray(item.material) ? item.material : [item.material]) : [];
-    materials.forEach(entry => entry.dispose());
+    if(item.geometry)geometries.add(item.geometry);
+    const entries = item.material ? (Array.isArray(item.material) ? item.material : [item.material]) : [];
+    entries.forEach(entry=>materials.add(entry));
   });
+  geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());
 }

@@ -1,3 +1,4 @@
+import { lightingOf, visibilityLabel } from './environment';
 import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Canvas } from '@react-three/fiber';
@@ -11,6 +12,7 @@ import { visibleContacts, type CameraView, type Category, type Position, type Sc
 import { contactKinematics } from './kinematics';
 import { bladePass, combinedLevel, rotorLevel, RotorAudio } from './acoustics';
 import { airframeFor } from './airframes';
+import { useFlightPreparation } from './useFlightPreparation';
 import { cameraLabels, isGeographic, THEATRES, type Theatre, type TheatreId } from './theatres';
 import type { NavigationInput } from './earthNavigationMath';
 class SceneBoundary extends Component<{children:ReactNode;label:string},{failed:boolean}> {
@@ -18,7 +20,7 @@ class SceneBoundary extends Component<{children:ReactNode;label:string},{failed:
   static getDerivedStateFromError(){return {failed:true};}
   render(){return this.state.failed?<div className="canvas-error"><Focus size={28}/><h3>{this.props.label} unavailable</h3><p>Enable hardware acceleration in your browser.</p></div>:this.props.children;}
 }
-type Props = { scenario:Scenario; time:MutableRefObject<number>; displayTime:number; selected:boolean; phase:'preview'|'running'|'paused'|'replay'; cameraView:CameraView; onCameraChange:(view:CameraView)=>void; onSelect:()=>void; onResume?:()=>void; onPause?:()=>void; previewPlaying?:boolean; onTogglePreview?:()=>void; replayPlaying?:boolean; onNotice?:(notice:string)=>void; radarTarget?:HTMLElement|null; assessment?:Category|''; theatre:Theatre; onTheatreChange:(id:TheatreId)=>void };
+type Props = { scenario:Scenario; time:MutableRefObject<number>; displayTime:number; selected:boolean; phase:'preview'|'running'|'paused'|'replay'; cameraView:CameraView; onCameraChange:(view:CameraView)=>void; onSelect:()=>void; onResume?:()=>void; onPause?:()=>void; previewPlaying?:boolean; onTogglePreview?:()=>void; replayPlaying?:boolean; onNotice?:(notice:string)=>void; radarTarget?:HTMLElement|null; assessment?:Category|''; theatre:Theatre; onTheatreChange:(id:TheatreId)=>void; pilotCamera?:'chase'|'fpv'|'free'; onPilotCamera?:(camera:'chase'|'fpv'|'free')=>void };
 type ThermalPalette='white'|'black'|'iron';
 const paletteLabels:Record<ThermalPalette,string>={white:'White hot',black:'Black hot',iron:'Ironbow'};
 const zoomLevels=[{factor:6,label:'WFOV'},{factor:2.5,label:'MFOV'},{factor:1,label:'NFOV'}];
@@ -30,7 +32,8 @@ function HeadingTape({bearing}:{bearing:number}) {
     <strong>{bearing.toString().padStart(3,'0')}°</strong>
   </div>;
 }
-export default function SceneView({scenario,time,displayTime,selected,phase,cameraView,onCameraChange,onSelect,onResume,onPause,previewPlaying=false,onTogglePreview,replayPlaying=false,onNotice,radarTarget,assessment='',theatre,onTheatreChange}:Props) {
+export default function SceneView({scenario,time,displayTime,selected,phase,cameraView,onCameraChange,onSelect,onResume,onPause,previewPlaying=false,onTogglePreview,replayPlaying=false,onNotice,radarTarget,assessment='',theatre,onTheatreChange,pilotCamera,onPilotCamera}:Props) {
+  const preparation=useFlightPreparation(scenario);
   const [bearing,setBearing]=useState(0);
   const world=isGeographic(theatre)?'earth':'training';
   const [earthStatus,setEarthStatus]=useState('Loading satellite imagery and 3D terrain…');
@@ -56,7 +59,7 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
   const updateBearing=useCallback((value:number)=>setBearing(value),[]);
   // A new scenario has new tracks: drop the previous cue so the sensor returns to standby.
   useEffect(()=>{setTrack(0);setSensorCue(false);setTelemetry(null);},[scenario]);
-  const metresPerUnit=world==='earth'?8:1;
+  const metresPerUnit=scenario.version===3?1:world==='earth'?8:1;
   // Satellite photography carries no thermal information, so thermal is offered in the 3D district only.
   const thermalActive=thermal&&world==='training';
   const toggleAudio=useCallback(()=>setAudioOn(on=>{try{localStorage.setItem('aeron-audio',on?'off':'on');}catch{/* preference only */}return !on;}),[]);
@@ -77,7 +80,7 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
           const origin=observerRef.current;
           const range=Math.hypot((x-origin[0])*metresPerUnit,(y-origin[1])*metresPerUnit-1.6,(z-origin[2])*metresPerUnit);
           levels.push(Math.min(1,rotorLevel(range)*airframe.loudness));
-          if(range<nearest){nearest=range;pitch=bladePass(airframe.bladePassHz,k.speed,k.forwardAccel);}
+          if(range<nearest){nearest=range;pitch=k.flight?.rotorRPM.length?k.flight.rotorRPM.reduce((a,b)=>a+b,0)/k.flight.rotorRPM.length*2/60:bladePass(airframe.bladePassHz,k.speed,k.forwardAccel);}
         }
         audio.update(combinedLevel(levels),pitch);
       }
@@ -87,6 +90,7 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
     return()=>{cancelAnimationFrame(frame);audio.dispose();};
   },[audioOn,scenario,phase,metresPerUnit,time]);
   useEffect(()=>{
+    if(pilotCamera)return;
     const key=(event:KeyboardEvent)=>{
       const element=event.target as HTMLElement;
       if(element.closest('input,select,textarea')||event.altKey||event.ctrlKey||event.metaKey||event.repeat)return;
@@ -99,7 +103,7 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
       if(k==='h')setThermal(on=>!on);
     };
     window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
-  },[displayTime,scenario,toggleAudio,toggleFullscreen]);
+  },[displayTime,scenario,toggleAudio,toggleFullscreen,pilotCamera]);
   const sensorActive=(selected||sensorCue)&&displayTime>=scenario.arrival;
   const views=(['overview','rooftop','street'] as CameraView[]).map(id=>({id,label:cameraLabels[theatre.kind][id]}));
   const coordinates=theatre.latitude!==undefined&&theatre.longitude!==undefined?`${theatre.latitude.toFixed(4)}° N  ${theatre.longitude.toFixed(4)}° E`:'';
@@ -108,17 +112,18 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
   const trackLabel=`T${(Math.min(track,scenario.count-1)+1).toString().padStart(2,'0')}`;
   return <div ref={sceneRef} className={`scene ${phase==='replay'?'replay-scene':''} world-${world}`}>
     <svg className="filter-defs" aria-hidden><filter id="thermal-iron" colorInterpolationFilters="sRGB"><feComponentTransfer><feFuncR type="table" tableValues="0 .25 .62 .9 1 1"/><feFuncG type="table" tableValues="0 0 .08 .38 .76 1"/><feFuncB type="table" tableValues="0 .42 .5 .08 0 .85"/></feComponentTransfer></filter></svg>
-    <div className={`main-view ${thermalActive?`thermal palette-${palette}`:''}`}><SceneBoundary label="3D view"><Suspense fallback={<div className="canvas-error"><span className="loader"/>Preparing the scene…</div>}>{world==='earth'?<EarthScene scenario={scenario} time={time} selected={selected} theatre={theatre} labels={labels} onSelect={onSelect} cameraView={cameraView} onBearingChange={updateBearing} onObserverChange={updateObserver} highQuality={quality==='high'} onStatus={setEarthStatus} onGround={setGround} onHome={()=>onCameraChange('overview')} input={earthInput} onInputChange={setEarthInput} onTutorialOpen={()=>onPause?.()}/>:<Canvas shadows camera={{position:[28,22,42],fov:44,near:.2,far:600}} dpr={quality==='high'?[1,2]:[1,1.25]} gl={{antialias:true,toneMappingExposure:.9}}><DelhiScene scenario={scenario} time={time} selected={selected} onSelect={onSelect} cameraView={cameraView} onBearingChange={updateBearing} highQuality={quality==='high'} thermal={thermalActive}/></Canvas>}</Suspense></SceneBoundary></div>
+    <div className={`main-view ${thermalActive?`thermal palette-${palette}`:''}`}><SceneBoundary label="3D view"><Suspense fallback={<div className="canvas-error"><span className="loader"/>Preparing the scene…</div>}>{world==='earth'?<EarthScene scenario={scenario} time={time} selected={selected} theatre={theatre} labels={labels} onSelect={onSelect} cameraView={cameraView} onBearingChange={updateBearing} onObserverChange={updateObserver} highQuality={quality==='high'} onStatus={setEarthStatus} onGround={setGround} onHome={()=>onCameraChange('overview')} input={earthInput} onInputChange={setEarthInput} onTutorialOpen={()=>onPause?.()} pilotCamera={pilotCamera} onFreeCamera={()=>onPilotCamera?.('free')}/>:<Canvas shadows camera={{position:[28,22,42],fov:44,near:.2,far:600}} dpr={quality==='high'?[1,2]:[1,1.25]} gl={{antialias:true,toneMappingExposure:.9}}><DelhiScene scenario={scenario} time={time} selected={selected} onSelect={onSelect} cameraView={cameraView} onBearingChange={updateBearing} highQuality={quality==='high'} thermal={thermalActive} pilotCamera={pilotCamera} onFreeCamera={()=>onPilotCamera?.('free')}/></Canvas>}</Suspense></SceneBoundary></div>
+    {!preparation.ready&&<div className="flight-loading" role="status"><span className="loader"/><strong>{preparation.error||'Compiling the flight…'}</strong>{preparation.error&&<button onClick={preparation.retry}>Retry flight</button>}</div>}
     <div className="scene-vignette" aria-hidden/>
     <div className="scene-hud-top">
       <div className="scene-id">
-        <div className={`scene-state state-${stateLabel.toLowerCase()}`}><span className="state-dot"/>{stateLabel}<i/>{thermalActive?`LWIR · ${paletteLabels[palette].toUpperCase()}`:scenario.dusk?'DUSK':'DAY'}<i/>{scenario.difficulty==='challenge'?'DENSE HAZE':'LIGHT HAZE'}</div>
+        <div className={`scene-state state-${stateLabel.toLowerCase()}`}><span className="state-dot"/>{stateLabel}<i/>{thermalActive?`LWIR · ${paletteLabels[palette].toUpperCase()}`:lightingOf(scenario).toUpperCase()}<i/>{visibilityLabel(scenario).toUpperCase()}</div>
         <div className="scene-coordinate"><strong>{world==='earth'?`${theatre.name.toUpperCase()} · ${theatre.region.toUpperCase()}`:'TRAINING DISTRICT · SECTOR 01'}</strong><span>{world==='earth'?`${coordinates}${ground!==null?`  ·  DATUM ${Math.round(ground).toLocaleString('en-IN')} m`:''}`:'SYNTHETIC CITY BLOCK · 1 UNIT = 1 m'}</span></div>
-        {world==='earth'&&<div className="earth-source" role="status">{earthStatus}</div>}
+        {world==='earth'&&<div className="earth-source" role="status">{earthStatus}{(lightingOf(scenario)==='night'||scenario.fog)&&<span className="environment-note"> · SIMULATED {lightingOf(scenario)==='night'?'NIGHT':''}{lightingOf(scenario)==='night'&&scenario.fog?' + ':''}{scenario.fog?'FOG':''}</span>}</div>}
       </div>
       <HeadingTape bearing={bearing}/>
       <div className="scene-tools">
-        <label className="theatre-control"><span className="sr-only">Theatre</span><select aria-label="Theatre" value={theatre.id} onChange={e=>onTheatreChange(e.target.value as TheatreId)}>{THEATRES.map(t=><option key={t.id} value={t.id}>{t.kind==='synthetic'?'3D training district':`${t.name} · ${t.region.split(',').at(-1)!.trim()}`}</option>)}</select></label>
+        <label className="theatre-control"><span className="sr-only">Theatre</span><select aria-label="Theatre" disabled={scenario.version===3&&phase!=='preview'} value={theatre.id} onChange={e=>onTheatreChange(e.target.value as TheatreId)}>{THEATRES.map(t=><option key={t.id} value={t.id}>{t.kind==='synthetic'?'3D training district':`${t.name} · ${t.region.split(',').at(-1)!.trim()}`}</option>)}</select></label>
         {world==='earth'&&<button className="icon-button" aria-pressed={labels} title={labels?'Hide site label':'Show site label'} aria-label={labels?'Hide site label':'Show site label'} onClick={()=>setLabels(v=>!v)}><MapPin size={15}/></button>}
         <button className="icon-button" title={scenario.category==='Bird'?'Rotor audio (kites are silent at range)':audioOn?'Mute rotor audio (M)':'Unmute rotor audio (M)'} aria-label={audioOn?'Mute rotor audio':'Unmute rotor audio'} aria-pressed={!audioOn} onClick={toggleAudio}>{audioOn?<Volume2 size={15}/>:<VolumeX size={15}/>}</button>
         <button className="icon-button" title="Fullscreen (F)" aria-label="Expand scene" onClick={toggleFullscreen}><Maximize2 size={15}/></button>
@@ -126,10 +131,10 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
     </div>
     <div className="view-modes"><div className="segmented-dark" role="group" aria-label="Sensor band"><button aria-pressed={!thermalActive} onClick={()=>setThermal(false)}>Visible</button><button aria-pressed={thermalActive} disabled={world==='earth'} title={world==='earth'?'Thermal view needs the 3D training district: satellite photos contain no heat data':'Long-wave infrared view (H)'} onClick={()=>setThermal(true)}>Thermal</button></div>
       {thermalActive&&<label className="palette-control"><span className="sr-only">Thermal palette</span><select aria-label="Thermal palette" value={palette} onChange={e=>setPalette(e.target.value as ThermalPalette)}>{(Object.keys(paletteLabels) as ThermalPalette[]).map(p=><option key={p} value={p}>{paletteLabels[p]}</option>)}</select></label>}</div>
-    <div className="camera-presets segmented-dark" role="group" aria-label="Camera position">{views.map(view=><button key={view.id} aria-pressed={cameraView===view.id} onClick={()=>onCameraChange(view.id)}>{view.label}</button>)}</div>
+    <div className="camera-presets segmented-dark" role="group" aria-label="Camera position">{pilotCamera?(['chase','fpv','free'] as const).map(view=><button key={view} aria-pressed={pilotCamera===view} onClick={()=>onPilotCamera?.(view)}>{view==='fpv'?'FPV':view==='chase'?'Chase':'Free map'}</button>):views.map(view=><button key={view.id} aria-pressed={cameraView===view.id} onClick={()=>onCameraChange(view.id)}>{view.label}</button>)}</div>
     <div className="reticle" aria-hidden><span/><span/><span/><span/></div>
     {sensorOpen?<section className={`eo-panel ${sensorActive?'eo-live':''} eo-${sensorMode} palette-${palette}`} aria-label="Electro-optical sensor feed">
-      <header className="eo-head"><span className="eo-name">EO-1 <i>{sensorMode==='ir'?`IR · ${{white:'WH',black:'BH',iron:'IRON'}[palette]}`:'DAY TV'}</i></span>
+      <header className="eo-head"><span className="eo-name">EO-1 <i>{sensorMode==='ir'?`IR · ${{white:'WH',black:'BH',iron:'IRON'}[palette]}`:lightingOf(scenario)==='night'?'NIGHT TV':'DAY TV'}</i></span>
         <div className="eo-modes" role="group" aria-label="Sensor band"><button aria-pressed={sensorMode==='eo'} onClick={()=>setSensorMode('eo')}>EO</button><button aria-pressed={sensorMode==='ir'} onClick={()=>setSensorMode('ir')}>IR</button></div>
         <button className="eo-close" aria-label="Hide sensor feed" title="Hide sensor feed" onClick={()=>setSensorOpen(false)}><VideoOff size={13}/></button></header>
       <div className="eo-view">

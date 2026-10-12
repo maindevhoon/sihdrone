@@ -40,6 +40,11 @@ node --import tsx scripts/create-contact-models.mjs
 | `src/simulation.ts` | Scenario types, seeded generation, contact positions, scoring, recommendations |
 | `src/airframes.ts` | Published airframe specifications and the seed-based airframe choice; `airframes.test.ts` checks models against them |
 | `src/kinematics.ts` | Velocity, heading, attitude, wingbeat and strobe timing derived from `contactPosition` |
+| `src/flightPhysics.ts`, `flightProfiles.ts`, `flightScenario.ts` | 120 Hz rigid-body solver, aerodynamic profiles, seeded v3 routes |
+| `src/flightTrace.ts`, `flightRuntime.ts`, `flight.worker.ts` | 60 Hz trace compilation/interpolation, two-trace cache and worker lifecycle |
+| `src/flightTerrain.ts`, `useFlightTerrain.ts` | Frozen 2 km terrain snapshot, sampling/retry/flat fallback |
+| `src/PilotView.tsx`, `usePilot.ts`, `pilotControls.ts`, `FlightCamera.tsx` | Unscored manual flight, focused keyboard controls and Chase/FPV cameras |
+| `src/birds.ts` | Species proportions and published references |
 | `src/contactGeometry.ts` | Real-size drone/kite builders and pose/animation shared by the scene, sensor feed and GLB export |
 | `src/ContactModel.tsx` | R3F wrapper that places a contact model on the shared trajectory |
 | `src/SensorFeed.tsx` | EO/IR sensor camera that tracks a radar-cued contact |
@@ -66,7 +71,8 @@ node --import tsx scripts/create-contact-models.mjs
 
 - Keep scenario generation, positions, and scoring deterministic for a given scenario version, seed, and simulation time. Randomness belongs in scenario/deck creation, never in frame rendering or replay.
 - Use `contactPosition` and `visibleContacts` (and `contactKinematics`, derived from them) as the shared source for both renderers, the sensor feed, radar, and replay. Contact models are real size in metres; Earth view scales positions, not models. Support the full generated contact count in every view; do not assume a fixed maximum from one sample scenario.
-- The scenario format currently supports versions 1 and 2. Preserve the version-1 path when loading or repeating older records. If generation or motion semantics change, version them explicitly and update validation and compatibility tests.
+- The scenario format supports versions 1, 2 and 3. Preserve version-1/2 generation and motion when loading or repeating older records. New v3 scenarios retain their flight definition and frozen terrain snapshot; never resample or regenerate them using current terrain during replay. Changes to physics semantics require an explicit version/compatibility decision and tests.
+- Prepare v3 automatic traces before advancing a preview, exercise or replay clock. The 120 Hz solver belongs in the worker, with 60 Hz trace interpolation shared by renderers, radar, sensor and audio. Keep the compiled cache bounded at two traces. Manual piloting uses a separate worker clock and is unscored and unsaved; camera movement never drives pilot inputs.
 - The session format is separately versioned at 1, with storage key `aeron-sessions-v1`. All `aeron-*` storage keys predate the rename to Trinetra; keep them unchanged so saved results and preferences survive. Storage validates regenerated scenario fields and recomputed scores. Update these together when changing the schema or scoring, with an explicit migration/compatibility decision.
 - Keep the 200 numbered seed entries stable. Shuffle should cover a complete cycle without repeats and avoid repeating the current seed at a cycle boundary. Display the full seed so a variation can be reproduced.
 - All motion, radar trails, sweep animation, and recorded events use the exercise clock. Pause must freeze simulation time. An active exercise pauses when the document becomes hidden.
@@ -79,9 +85,10 @@ node --import tsx scripts/create-contact-models.mjs
 ## Rendering and radar
 
 - Preserve the local training scene and the Earth view. Keep heavy renderer code lazy-loaded, bound resource usage, and dispose of WebGL resources, controls, event handlers, and textures when appropriate. Check lifecycle changes under React StrictMode.
-- The simulation uses `[x, y, z]`, with `y` as altitude. The local radar observer is `[0, 0, 12]`. Earth mode translates that observer with the map reticle on the exercise airspace plane (`earthRadarObserver.ts`), keeping altitude relative to the airspace datum. Pass the shared observer to radar projection, range filtering, trails, picking, readouts, EO/IR and rotor range. Earth mode maps each training unit to eight metres; the local scene uses one. Camera navigation changes viewpoint even on a held clock; it must never change contact motion or saved results.
+- The simulation uses `[x, y, z]`, with `y` as altitude. The local radar observer is `[0, 0, 12]`. Earth mode translates that observer with the map reticle on the exercise airspace plane (`earthRadarObserver.ts`), keeping altitude relative to the airspace datum. Pass the shared observer to radar projection, range filtering, trails, picking, readouts, EO/IR and rotor range. V3 positions and models use metres in both scenes; version-1/2 Earth positions retain eight metres per training unit. Camera navigation changes viewpoint even on a held clock; it must never change contact motion or saved results.
 - Radar heading-up mode rotates the projection using camera heading. Preserve range when rotating, count out-of-range contacts accurately, and never clamp them to misleading positions on the scope.
 - Airframe dimensions must stay within 2% of the published envelope in `airframes.ts`; cite the source when adding an airframe and only display published figures. Regenerate the GLBs after geometry changes.
+- Regenerate `public/models/credits.json` with GLBs; retain source links, original-mesh provenance and hashes. Estimated aerodynamic coefficients, bird internal proportions and reference-plane geometry must remain labelled as estimates. V3 named rotor/wing/control-surface joints and poses must agree in Three.js and Cesium. Use altitude eligibility, density and frozen sampled terrain consistently; collision is approximate and excludes synthetic district buildings.
 - Thermal views are display approximations; do not describe them as radiometric or validated sensor output.
 - Radar contact inspection may record an observation during a live exercise, but preview and replay interactions must not alter exercise results. Radar track identity reflects the operator's classification, never the scenario category.
 - Keep the cockpit-inspired display legible and its controls usable at narrow widths. Check that radar, camera presets, attribution, and bottom controls do not overlap.

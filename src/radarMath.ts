@@ -1,4 +1,5 @@
 import { contactPosition, type Position, type Scenario } from './simulation';
+import { sampleFlight } from './flightRuntime';
 export const SCOPE_CENTER=120, SCOPE_RADIUS=88;
 export const DEFAULT_RADAR_OBSERVER:Position=[0,0,12];
 export const radarRange=(position:Position,observer:Position=DEFAULT_RADAR_OBSERVER)=>Math.hypot(position[0]-observer[0],position[2]-observer[2]);
@@ -23,7 +24,7 @@ export function contactReadout(scenario:Scenario,time:number,id:number,metresPer
     range:radarRange(p,observer)*metresPerUnit,
     bearing:(Math.atan2(p[0]-observer[0],observer[2]-p[2])*180/Math.PI+360)%360,
     altitude:(p[1]-observer[1])*metresPerUnit,
-    speed:delta>0?Math.hypot(p[0]-previous[0],p[2]-previous[2])*metresPerUnit/delta:0,
+    speed:scenario.version===3?Math.hypot(...sampleFlight(scenario,time,id).velocity.filter((_,i)=>i!==1)):delta>0?Math.hypot(p[0]-previous[0],p[2]-previous[2])*metresPerUnit/delta:0,
   };
 }
 export function contactTrail(scenario:Scenario,time:number,id:number,range:number,heading:number,observer:Position=DEFAULT_RADAR_OBSERVER) {

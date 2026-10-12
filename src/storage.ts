@@ -1,5 +1,8 @@
+import { LIGHTING_OPTIONS } from './environment';
 import { createScenario, scoreSession, type Session, type SessionEvent } from './simulation';
 import { THEATRES } from './theatres';
+import { validTerrain } from './flightTerrain';
+import { WIND_PRESETS } from './flightProfiles';
 export const STORAGE_KEY = 'aeron-sessions-v1';
 const eventTypes = ['start','observation','classification','pause','resume','finish'];
 function validEvent(value: unknown): value is SessionEvent {
@@ -12,11 +15,15 @@ function validSession(value: unknown): value is Session {
   const s = value as Session;
   const c = s.scenario;
   if (s.version !== 1 || typeof s.id !== 'string' || typeof s.createdAt !== 'string' || !Number.isFinite(Date.parse(s.createdAt)) || !c || !['skyline','passing','mixed'].includes(c.exercise) || !['guided','challenge'].includes(c.difficulty) || !Number.isInteger(c.seed) || c.seed < 0 || typeof c.dusk !== 'boolean' || !Number.isFinite(s.duration) || s.duration < 0 || s.duration > 45 || !(s.detection === null || Number.isFinite(s.detection)) || !['','Single drone','Drone group','Bird'].includes(s.answer) || !Array.isArray(s.events) || !s.events.every(validEvent)) return false;
-  if(c.version!==1&&c.version!==2)return false;
+  if(c.version!==1&&c.version!==2&&c.version!==3)return false;
   // Optional and additive: older results without a theatre stay valid; unknown ids are rejected.
   if(s.theatre!==undefined&&!THEATRES.some(t=>t.id===s.theatre))return false;
-  const expected = createScenario(c.exercise,c.seed,c.difficulty,c.dusk,c.version);
-  if (!Object.entries(expected).every(([key,value])=>c[key as keyof typeof c]===value)) return false;
+  if(c.lighting!==undefined&&(!LIGHTING_OPTIONS.includes(c.lighting)||c.dusk!==(c.lighting==='dusk')))return false;
+  if(c.fog!==undefined&&typeof c.fog!=='boolean')return false;
+  if(c.version===3&&(!c.flight||c.flight.version!==1||!validTerrain(c.flight.terrain)||!WIND_PRESETS.includes(c.flight.wind)||c.flight.terrain.theatre!==s.theatre))return false;
+  if(c.version!==3&&c.flight!==undefined)return false;
+  const expected = createScenario(c.exercise,c.seed,c.difficulty,c.dusk,c.version,{lighting:c.lighting,fog:c.fog},c.version===3?{terrain:c.flight!.terrain,wind:c.flight!.wind}:{});
+  if (!Object.entries(expected).every(([key,value])=>key==='flight'?JSON.stringify(c.flight)===JSON.stringify(value):c[key as keyof typeof c]===value)) return false;
   const scored=scoreSession(c,s.detection,s.answer,s.duration);
   return scored.score === s.score && scored.detectionScore === s.detectionScore && scored.classificationScore === s.classificationScore && scored.observationValid === s.observationValid;
 }

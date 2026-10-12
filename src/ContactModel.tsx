@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, type MutableRefObject, type ReactNode } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Group } from 'three';
-import { createBirdModel, createDroneModel, disposeModel, poseContact, type ContactPalette } from './contactGeometry';
+import { createBirdModel, createDroneModel, createFlightModel, disposeModel, poseContact, type ContactPalette } from './contactGeometry';
+import { lightingOf } from './environment';
 import { contactKinematics } from './kinematics';
 import { airframeFor } from './airframes';
 import type { Scenario } from './simulation';
@@ -18,7 +19,8 @@ export default function ContactModel({ scenario, time, index, palette = 'visible
   // The airframe type is a deterministic function of the variation, so repeats look identical.
   const airframe = airframeFor(scenario);
   const dusk = scenario.dusk;
-  const model = useMemo(() => bird || !airframe ? createBirdModel({ palette }) : createDroneModel({ palette, airframe, dusk }), [bird, palette, airframe, dusk]);
+  const modelId=scenario.flight?.model,lowLight=lightingOf(scenario)!=='day';
+  const model = useMemo(() => modelId?createFlightModel(modelId,palette,lowLight):bird || !airframe ? createBirdModel({ palette }) : createDroneModel({ palette, airframe, dusk }), [bird, palette, airframe, dusk,modelId,lowLight]);
   useEffect(() => () => disposeModel(model), [model]);
   const ref = useRef<Group>(null);
   useFrame(() => {

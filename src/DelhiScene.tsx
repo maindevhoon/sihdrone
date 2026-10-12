@@ -1,3 +1,4 @@
+import { lightingOf } from './environment';
 import { memo, useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html, OrbitControls, RoundedBox, Sky } from '@react-three/drei';
@@ -6,15 +7,17 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { useThree } from '@react-three/fiber';
 import type { Scenario, CameraView } from './simulation';
 import ContactModel from './ContactModel';
+import FlightCamera from './FlightCamera';
 
-type SceneProps = { scenario: Scenario; time: MutableRefObject<number>; selected: boolean; onSelect: () => void; cameraView: CameraView; onBearingChange:(bearing:number)=>void; highQuality:boolean; thermal?:boolean };
+type SceneProps = { scenario: Scenario; time: MutableRefObject<number>; selected: boolean; onSelect: () => void; cameraView: CameraView; onBearingChange:(bearing:number)=>void; highQuality:boolean; thermal?:boolean;pilotCamera?:'chase'|'fpv'|'free';onFreeCamera?:()=>void };
 /**
  * Apparent temperature (0 cold – 1 hot) of a district surface for the long-wave IR view: emitters
  * are hottest, sun-loaded dark surfaces (asphalt, tyres) warm, vegetation and glass cool.
  */
 function surfaceHeat(material: Material, dusk: boolean) {
   const m = material as MeshStandardMaterial;
-  if (m.emissive && m.emissiveIntensity > .3 && m.emissive.r + m.emissive.g + m.emissive.b > .3) return .95;
+  // A window emission mask must not make an entire building a hot emitter.
+  if (!m.emissiveMap && m.emissive && m.emissiveIntensity > .3 && m.emissive.r + m.emissive.g + m.emissive.b > .3) return .95;
   if (!m.color) return .05;
   const hsl = {h: 0, s: 0, l: 0}; m.color.getHSL(hsl, SRGBColorSpace);
   if (m.transparent && m.opacity < .9) return .22;
@@ -49,13 +52,13 @@ function ThermalLook({ enabled, dusk }: { enabled: boolean; dusk: boolean }) {
   }, [scene, enabled, dusk]);
   return null;
 }
-function surfaceTexture(kind: 'stone' | 'road' | 'grass' | 'facade', dusk = false) {
+function surfaceTexture(kind: 'stone' | 'road' | 'grass' | 'facade' | 'windows', dusk = false) {
   const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = {stone:'#c1a887',road:'#494d4c',grass:'#7d8562',facade:'#c5b9a3'}[kind];
+  ctx.fillStyle = {stone:'#c1a887',road:'#494d4c',grass:'#7d8562',facade:'#c5b9a3',windows:'#000000'}[kind];
   ctx.fillRect(0,0,256,256);
   let seed = 9271;
-  for(let i=0;i<12000;i++) { seed=(seed*16807)%2147483647; const x=seed%256; seed=(seed*16807)%2147483647; const y=seed%256; ctx.fillStyle=i%2?'rgba(255,255,255,.05)':'rgba(0,0,0,.06)';ctx.fillRect(x,y,2,2); }
+  for(let i=0;i<(kind==='windows'?0:12000);i++) { seed=(seed*16807)%2147483647; const x=seed%256; seed=(seed*16807)%2147483647; const y=seed%256; ctx.fillStyle=i%2?'rgba(255,255,255,.05)':'rgba(0,0,0,.06)';ctx.fillRect(x,y,2,2); }
   if(kind==='stone') {ctx.strokeStyle='#78654a20';ctx.lineWidth=1;for(let y=0;y<256;y+=32){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(256,y);ctx.stroke();for(let x=(y%64?32:0);x<256;x+=64){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+32);ctx.stroke();}}}
   if(kind==='facade') {
     for(let y=12;y<256;y+=64)for(let x=12;x<256;x+=64){
@@ -66,6 +69,7 @@ function surfaceTexture(kind: 'stone' | 'road' | 'grass' | 'facade', dusk = fals
       ctx.fillStyle='#746c5b';ctx.fillRect(x-5,y+39,44,4);
     }
   }
+  if(kind==='windows')for(let y=12;y<256;y+=64)for(let x=12;x<256;x+=64)if((x+y)%3===0){ctx.fillStyle='#ffffff';ctx.fillRect(x,y,32,38);}
   const texture=new CanvasTexture(canvas);texture.wrapS=texture.wrapT=RepeatWrapping;texture.colorSpace=SRGBColorSpace;
   texture.repeat.set(kind==='grass'?25:kind==='road'?12:kind==='stone'?2:1,kind==='grass'?25:kind==='road'?12:kind==='stone'?2:1);
   texture.anisotropy=4;return texture;
@@ -76,17 +80,17 @@ const cameraPresets: Record<CameraView,{position:Vector3;target:Vector3}> = {
   rooftop:{position:new Vector3(19,15,20),target:new Vector3(0,14,-8)},
   street:{position:new Vector3(0,2.5,25),target:new Vector3(0,12,-16)},
 };
-function CameraRig({view,onBearingChange}: {view:CameraView;onBearingChange:(bearing:number)=>void}) {
+function CameraRig({view,onBearingChange,physical=false}: {view:CameraView;onBearingChange:(bearing:number)=>void;physical?:boolean}) {
   const {camera}=useThree();
   const controls=useRef<OrbitControlsImpl>(null);
   const moving=useRef(true);
   const direction=useMemo(()=>new Vector3(),[]);
   const updateBearing=useCallback(()=>{camera.getWorldDirection(direction);onBearingChange(Math.round((Math.atan2(direction.x,-direction.z)*180/Math.PI+360)%360)%360);},[camera,direction,onBearingChange]);
-  useEffect(()=>{moving.current=true;updateBearing();},[view,updateBearing]);
-  useFrame((_,delta)=>{if(!moving.current||!controls.current)return;const preset=cameraPresets[view];const ease=1-Math.exp(-delta*5);camera.position.lerp(preset.position,ease);controls.current.target.lerp(preset.target,ease);controls.current.update();
+  useEffect(()=>{moving.current=true;updateBearing();},[view,updateBearing,physical]);
+  useFrame((_,delta)=>{if(!moving.current||!controls.current)return;const preset=physical?{position:view==='overview'?new Vector3(140,125,160):view==='rooftop'?new Vector3(90,75,110):new Vector3(0,3,90),target:new Vector3(0,65,0)}:cameraPresets[view];const ease=1-Math.exp(-delta*5);camera.position.lerp(preset.position,ease);controls.current.target.lerp(preset.target,ease);controls.current.update();
     if(camera.position.distanceTo(preset.position)<.05&&controls.current.target.distanceTo(preset.target)<.05)moving.current=false;
   });
-  return <OrbitControls ref={controls} target={initialTarget} minDistance={8} maxDistance={85} maxPolarAngle={Math.PI*.495} minPolarAngle={.05} enablePan={false} onChange={updateBearing} onStart={()=>{moving.current=false;}}/>;
+  return <OrbitControls ref={controls} target={initialTarget} minDistance={8} maxDistance={physical?500:85} maxPolarAngle={Math.PI*.495} minPolarAngle={.05} enablePan={false} onChange={updateBearing} onStart={()=>{moving.current=false;}}/>;
 }
 function Tree({x,z,scale=1}: {x:number;z:number;scale?:number}) {
   return <group position={[x,0,z]} scale={scale}>
@@ -99,11 +103,12 @@ function ShopSign({index,width,z}: {index:number;width:number;z:number}) {
   useEffect(()=>()=>texture.dispose(),[texture]);
   return <mesh position={[0,2.9,z]}><planeGeometry args={[Math.min(width-1,7),.9]}/><meshStandardMaterial map={texture} roughness={.75}/></mesh>;
 }
-function Building({x,z,width,height,depth,stone,facade,index}: {x:number;z:number;width:number;height:number;depth:number;stone:CanvasTexture;facade:CanvasTexture;index:number}) {
+function Building({x,z,width,height,depth,stone,facade,windows,lit,index}: {x:number;z:number;width:number;height:number;depth:number;stone:CanvasTexture;facade:CanvasTexture;windows:CanvasTexture;lit:boolean;index:number}) {
   const map=useMemo(()=>{const copy=facade.clone();copy.repeat.set(width/8,height/9);return copy;},[facade,width,height]);
-  useEffect(()=>()=>map.dispose(),[map]);
+  const emission=useMemo(()=>{const copy=windows.clone();copy.repeat.copy(map.repeat);return copy;},[windows,map]);
+  useEffect(()=>()=>{map.dispose();emission.dispose();},[map,emission]);
   return <group position={[x,0,z]}>
-    <mesh position={[0,height/2,0]} castShadow receiveShadow><boxGeometry args={[width,height,depth]}/><meshStandardMaterial map={map} color={['#f4e6d2','#dec4a6','#dacfc0','#d3b89d'][index%4]} roughness={.85}/></mesh>
+    <mesh position={[0,height/2,0]} castShadow receiveShadow><boxGeometry args={[width,height,depth]}/><meshStandardMaterial map={map} emissiveMap={emission} emissive="#ffd4a0" emissiveIntensity={lit?.8:0} color={['#f4e6d2','#dec4a6','#dacfc0','#d3b89d'][index%4]} roughness={.85}/></mesh>
     <mesh position={[0,height+.14,0]} castShadow><boxGeometry args={[width+.3,.28,depth+.3]}/><meshStandardMaterial map={stone} color="#ddd3c0"/></mesh>
     {[-1,1].map(s=><mesh key={s} position={[s*width/2,height+.45,0]}><boxGeometry args={[.18,.6,depth]}/><meshStandardMaterial color="#c9baa2"/></mesh>)}
     {[-1,1].map(s=><mesh key={s} position={[0,height+.45,s*depth/2]}><boxGeometry args={[width,.6,.18]}/><meshStandardMaterial color="#c9baa2"/></mesh>)}
@@ -155,19 +160,22 @@ function Metro({time}: {time:MutableRefObject<number>}) {
     </group>)}</group>
   </group>;
 }
-export default memo(function DelhiScene({scenario,time,selected,onSelect,cameraView,onBearingChange,highQuality,thermal=false}: SceneProps) {
-  const dusk=scenario.dusk;
-  const textures=useMemo(()=>({stone:surfaceTexture('stone'),road:surfaceTexture('road'),grass:surfaceTexture('grass'),facade:surfaceTexture('facade',dusk)}),[dusk]);
+export default memo(function DelhiScene({scenario,time,selected,onSelect,cameraView,onBearingChange,highQuality,thermal=false,pilotCamera,onFreeCamera}: SceneProps) {
+  const lighting=lightingOf(scenario), dusk=lighting==='dusk', night=lighting==='night', lowLight=lighting!=='day';
+  const textures=useMemo(()=>({stone:surfaceTexture('stone'),road:surfaceTexture('road'),grass:surfaceTexture('grass'),facade:surfaceTexture('facade',lowLight),windows:surfaceTexture('windows')}),[lowLight]);
   useEffect(()=>()=>{Object.values(textures).forEach(texture=>texture.dispose());},[textures]);
   const buildings=useMemo(()=>Array.from({length:26},(_,i)=>({x:(i%2?1:-1)*(19+(Math.floor(i/2)%3)*13),z:-Math.floor(i/6)*19-8,width:8+i%3*1.4,height:5+i%4*2.3,depth:8+i%2*2,index:i})),[]);
   const roadPaint='#d3d2bb';
+  const fogColor=thermal?'#3a3a3a':night?'#182636':dusk?'#8c8b98':'#d4ceb9';
   return <>
     {/* In LWIR the clear sky is the coldest thing in view and haze converges on a mid grey. */}
-    <color attach="background" args={[thermal?'#101010':dusk?'#8c8b98':'#c8c8be']}/>
-    <fog attach="fog" args={[thermal?'#3a3a3a':dusk?'#8c8b98':'#d4ceb9',scenario.difficulty==='challenge'?30:65,scenario.difficulty==='challenge'?130:205]}/>
-    {!thermal&&<Sky distance={450000} sunPosition={dusk?[-70,3,-80]:[-60,22,-90]} turbidity={dusk?9:4.5} rayleigh={dusk?1.2:1.9} mieCoefficient={.006} mieDirectionalG={.82}/>}
-    <hemisphereLight args={['#d4deeb','#8e7e62',dusk?1.2:1.8]}/>
-    <directionalLight position={[-35,35,5]} intensity={dusk?2:3.2} color={dusk?'#ffbf83':'#fff0d3'} castShadow shadow-mapSize={highQuality?[2048,2048]:[1024,1024]} shadow-camera-left={-70} shadow-camera-right={70} shadow-camera-top={70} shadow-camera-bottom={-70} shadow-camera-far={160} shadow-normalBias={.08}/>
+    <color attach="background" args={[thermal?'#101010':scenario.fog?fogColor:night?'#08111f':dusk?'#8c8b98':'#c8c8be']}/>
+    <fog attach="fog" args={[fogColor,scenario.fog?8:scenario.difficulty==='challenge'?30:65,scenario.fog?(thermal?105:78):scenario.version===3?600:scenario.difficulty==='challenge'?130:205]}/>
+    {!thermal&&!night&&!scenario.fog&&<Sky distance={450000} sunPosition={dusk?[-70,3,-80]:[-60,22,-90]} turbidity={dusk?9:4.5} rayleigh={dusk?1.2:1.9} mieCoefficient={.006} mieDirectionalG={.82}/>}
+    <hemisphereLight args={['#d4deeb','#8e7e62',night?.22:dusk?1.2:1.8]}/>
+    <directionalLight position={[-35,35,5]} intensity={night?.45:dusk?2:3.2} color={night?'#a6bff2':dusk?'#ffbf83':'#fff0d3'} castShadow shadow-mapSize={highQuality?[2048,2048]:[1024,1024]} shadow-camera-left={-70} shadow-camera-right={70} shadow-camera-top={70} shadow-camera-bottom={-70} shadow-camera-far={160} shadow-normalBias={.08}/>
+    {night&&!thermal&&<mesh position={[-75,42,-220]}><sphereGeometry args={[1.3,24,16]}/><meshBasicMaterial color="#dce6f3" fog={scenario.fog??false}/></mesh>}
+    {lowLight&&[-1,1].flatMap(side=>[-2,15].map(z=><pointLight key={`${side}-${z}`} position={[side*7.5,6.6,z]} color="#ffcb85" intensity={85} distance={24} decay={2}/>))}
     <mesh rotation={[-Math.PI/2,0,0]} position={[0,-.03,0]} receiveShadow><planeGeometry args={[400,400]}/><meshStandardMaterial map={textures.grass} bumpMap={textures.grass} bumpScale={.07} roughness={1}/></mesh>
     <mesh rotation={[-Math.PI/2,0,0]} position={[0,0,0]} receiveShadow><planeGeometry args={[13,180]}/><meshStandardMaterial map={textures.road} bumpMap={textures.road} bumpScale={.025} roughness={.92}/></mesh>
     <mesh rotation={[-Math.PI/2,0,0]} position={[0,.012,12]} receiveShadow><planeGeometry args={[140,10]}/><meshStandardMaterial map={textures.road}/></mesh>
@@ -178,13 +186,13 @@ export default memo(function DelhiScene({scenario,time,selected,onSelect,cameraV
       {Array.from({length:10},(_,i)=><group key={i} position={[side*8.3,0,i*17-70]}>
         <mesh position={[0,3.4,0]} castShadow><cylinderGeometry args={[.055,.085,6.8,8]}/><meshStandardMaterial color="#546056" metalness={.5}/></mesh>
         <mesh position={[-side*.4,6.8,0]}><boxGeometry args={[1.1,.11,.3]}/><meshStandardMaterial color="#353d38"/></mesh>
-        <mesh position={[-side*.75,6.72,0]}><boxGeometry args={[.4,.04,.23]}/><meshStandardMaterial color="#f1d6a3" emissive="#ffbd6e" emissiveIntensity={dusk?2:.1}/></mesh>
+        <mesh position={[-side*.75,6.72,0]}><boxGeometry args={[.4,.04,.23]}/><meshStandardMaterial color="#f1d6a3" emissive="#ffbd6e" emissiveIntensity={lowLight?2:.1}/></mesh>
       </group>)}
     </group>)}
     {Array.from({length:32},(_,i)=><mesh key={i} rotation={[-Math.PI/2,0,0]} position={[0,.018,i*5-85]}><planeGeometry args={[.12,2.5]}/><meshStandardMaterial color={roadPaint}/></mesh>)}
     {[-1,1].map(side=><mesh key={side} rotation={[-Math.PI/2,0,0]} position={[side*5.8,.019,0]}><planeGeometry args={[.1,180]}/><meshStandardMaterial color={roadPaint}/></mesh>)}
-    {buildings.map(b=><Building key={b.index} {...b} stone={textures.stone} facade={textures.facade}/>)}
-    {Array.from({length:18},(_,i)=><group key={i} position={[(i-9)*11,0,-112-(i%3)*9]}><mesh position={[0,(15+i%5*5)/2,0]} castShadow><boxGeometry args={[7,15+i%5*5,9]}/><meshStandardMaterial map={textures.facade} color="#bfc0b6"/></mesh></group>)}
+    {buildings.map(b=><Building key={b.index} {...b} stone={textures.stone} facade={textures.facade} windows={textures.windows} lit={lowLight}/>)}
+    {Array.from({length:18},(_,i)=><group key={i} position={[(i-9)*11,0,-112-(i%3)*9]}><mesh position={[0,(15+i%5*5)/2,0]} castShadow><boxGeometry args={[7,15+i%5*5,9]}/><meshStandardMaterial map={textures.facade} emissiveMap={textures.windows} emissive="#ffd4a0" emissiveIntensity={lowLight?.8:0} color="#bfc0b6"/></mesh></group>)}
     <mesh rotation={[-Math.PI/2,0,0]} position={[0,.035,-26]} receiveShadow><circleGeometry args={[8.4,64]}/><meshStandardMaterial map={textures.grass}/></mesh>
     <Gate stone={textures.stone}/>
     <Metro time={time}/>
@@ -195,7 +203,7 @@ export default memo(function DelhiScene({scenario,time,selected,onSelect,cameraV
       {/* After an observation the sensor overlays a track gate, as an EO tracker would. */}
       {selected&&<Html center zIndexRange={[2,0]} style={{pointerEvents:'none'}}><div className="track-gate"><span>T{(index+1).toString().padStart(2,'0')}</span></div></Html>}
     </ContactModel>)}
-    <CameraRig view={cameraView} onBearingChange={onBearingChange}/>
-    <ThermalLook enabled={thermal} dusk={dusk}/>
+    {pilotCamera&&pilotCamera!=='free'?<FlightCamera scenario={scenario} time={time} mode={pilotCamera} onFree={onFreeCamera} onBearing={onBearingChange}/>:<CameraRig view={cameraView} onBearingChange={onBearingChange} physical={scenario.version===3}/>}
+    <ThermalLook enabled={thermal} dusk={lowLight}/>
   </>;
 });

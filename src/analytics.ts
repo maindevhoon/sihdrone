@@ -1,3 +1,4 @@
+import { LIGHTING_OPTIONS, lightingOf, lightingLabels, visibilityLabel } from './environment';
 import { categories, exercises, type Category, type Session } from './simulation';
 import { THEATRES, theatreById } from './theatres';
 
@@ -23,9 +24,9 @@ export function summarize(history: Session[]) {
     const sessions = history.filter(s => s.scenario.category === category);
     return { category, sessions: sessions.length, accuracy: sessions.length ? sessions.filter(isCorrect).length/sessions.length : null, meanResponse: mean(times(sessions)) };
   });
-  const byCondition = (['guided', 'challenge'] as const).flatMap(difficulty => [false, true].map(dusk => {
-    const sessions = history.filter(s => s.scenario.difficulty === difficulty && s.scenario.dusk === dusk);
-    return { difficulty, dusk, sessions: sessions.length, meanScore: mean(sessions.map(s => s.score)), accuracy: sessions.length ? sessions.filter(isCorrect).length/sessions.length : null };
+  const byCondition = (['guided', 'challenge'] as const).flatMap(difficulty => LIGHTING_OPTIONS.map(lighting => {
+    const sessions = history.filter(s => s.scenario.difficulty === difficulty && lightingOf(s.scenario) === lighting);
+    return { difficulty, lighting, sessions: sessions.length, meanScore: mean(sessions.map(s => s.score)), accuracy: sessions.length ? sessions.filter(isCorrect).length/sessions.length : null };
   }));
   // Sessions saved before theatres were recorded are grouped as 'Not recorded'.
   const byTheatre = THEATRES.map(t => ({ id: t.id as string, name: t.kind === 'synthetic' ? 'Training district' : t.name, list: history.filter(s => s.theatre === t.id) }))
@@ -64,11 +65,11 @@ const csvCell = (value: string | number) => {
 };
 /** One row per session, oldest first, for instructors' spreadsheets. */
 export function historyCsv(history: Session[]) {
-  const header = ['Date (UTC)', 'Theatre', 'Exercise', 'Difficulty', 'Lighting', 'Seed', 'Scenario version', 'Present', 'Answer', 'Time to observe (s)', 'Observation points', 'Classification points', 'Score'];
+  const header = ['Date (UTC)', 'Theatre', 'Exercise', 'Difficulty', 'Lighting', 'Seed', 'Scenario version', 'Present', 'Answer', 'Time to observe (s)', 'Observation points', 'Classification points', 'Score', 'Visibility'];
   const rows = chronological(history).map(s => {
     const response = responseTime(s);
-    return [s.createdAt, s.theatre ? theatreById(s.theatre).name : '', exercises.find(e => e.id === s.scenario.exercise)?.short ?? s.scenario.exercise, s.scenario.difficulty, s.scenario.dusk ? 'Dusk' : 'Day', s.scenario.seed, s.scenario.version,
-      s.scenario.category, s.answer || 'None', response === null ? '' : response.toFixed(2), s.detectionScore, s.classificationScore, s.score];
+    return [s.createdAt, s.theatre ? theatreById(s.theatre).name : '', exercises.find(e => e.id === s.scenario.exercise)?.short ?? s.scenario.exercise, s.scenario.difficulty, lightingLabels[lightingOf(s.scenario)], s.scenario.seed, s.scenario.version,
+      s.scenario.category, s.answer || 'None', response === null ? '' : response.toFixed(2), s.detectionScore, s.classificationScore, s.score, visibilityLabel(s.scenario)];
   });
   return [header, ...rows].map(row => row.map(csvCell).join(',')).join('\n');
 }

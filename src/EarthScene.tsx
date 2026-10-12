@@ -1,3 +1,5 @@
+import { lightingOf } from './environment';
+import { earthEnvironmentStage } from './earthEnvironment';
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
   ArcGisMapServerImageryProvider, ArcGISTiledElevationTerrainProvider, CallbackPositionProperty, CallbackProperty,
@@ -15,6 +17,10 @@ import { Compass, Home, Minus, Plus, HelpCircle } from 'lucide-react';
 import GestureTutorial from './GestureTutorial';
 import { birdAttitude, contactKinematics, droneAttitude, wingBeat } from './kinematics';
 import { airframeFor } from './airframes';
+import { Euler, Quaternion as ThreeQuaternion } from 'three';
+import { sampleFlight } from './flightRuntime';
+import { FLIGHT_PROFILES } from './flightProfiles';
+import { rotate, add, scale } from './flightMath';
 import { cameraFraming, groundSamplePoints, type Theatre } from './theatres';
 
 type Props = {
@@ -23,6 +29,7 @@ type Props = {
   onBearingChange: (bearing: number) => void; onStatus: (status: string) => void; onGround?: (height: number) => void;
   onObserverChange: (observer: Position) => void;
   onHome:()=>void; onTutorialOpen:()=>void; input:NavigationInput; onInputChange:(input:NavigationInput)=>void;
+  pilotCamera?:'chase'|'fpv'|'free';onFreeCamera?:()=>void;
 };
 const env = (import.meta as ImportMeta & {env: Record<string, string | undefined>}).env;
 const googleKey = env.VITE_GOOGLE_MAPS_API_KEY;
@@ -78,6 +85,7 @@ export default function EarthScene(props: Props) {
   const previousView = useRef(props.cameraView);
   const {input}=props;
   const [help,setHelp]=useState(() => {
+    if(props.pilotCamera)return false;
     try { return sessionStorage.getItem('aeron-gesture-guide-v2') !== 'seen'; }
     catch { return true; }
   });
@@ -111,24 +119,47 @@ export default function EarthScene(props: Props) {
     viewer.scene.globe.enableLighting = true;
     viewer.clock.currentTime = JulianDate.fromIso8601('2026-10-04T06:00:00Z');
 
-    const anchor = () => { const t = current.current.theatre; return Cartesian3.fromDegrees(t.longitude ?? 0, t.latitude ?? 0, groundHeight.current); };
+    const anchor = () => { const t = current.current.theatre; return Cartesian3.fromDegrees(t.longitude ?? 0, t.latitude ?? 0, current.current.scenario.flight?.terrain.datum??groundHeight.current); };
     const frame = () => Transforms.eastNorthUpToFixedFrame(anchor());
     const contactPoint = (index: number, result?: Cartesian3) => {
       const [x,y,z] = contactPosition(current.current.scenario, current.current.time.current, index);
-      // One training-space unit represents eight real-world metres in Earth mode.
-      return Matrix4.multiplyByPoint(frame(), new Cartesian3(x*8,-z*8,y*8), result || new Cartesian3());
+      // v3 uses metres in both renderers; historical encounters retain their Earth scale.
+      const units=current.current.scenario.version===3?1:8;
+      return Matrix4.multiplyByPoint(frame(), new Cartesian3(x*units,-z*units,y*units), result || new Cartesian3());
     };
-    // Real-size airframes; Cesium enlarges them to a minimum on-screen size so they stay detectable.
-    const modelUri = () => {const airframe=airframeFor(current.current.scenario);return `/models/${airframe?`drone-${airframe.id}`:'bird'}.glb`;};
+    // v3 airframes stay real size; historical encounters retain their detection aids.
+    const modelUri = () => {const s=current.current.scenario,airframe=airframeFor(s);return `/models/${s.flight?`v3-${s.flight.model}`:airframe?`drone-${airframe.id}`:'bird'}.glb`;};
     const attitude = (index: number) => {
       const {scenario,time} = current.current, k = contactKinematics(scenario, time.current, index);
+      if(k.flight){const e=new Euler().setFromQuaternion(new ThreeQuaternion(...k.flight.orientation),'YXZ');return {k:{...k,heading:Math.PI-e.y},a:{pitch:e.x,roll:e.z}};}
       return {k, a: scenario.category==='Bird' ? birdAttitude(k) : droneAttitude(k)};
     };
     // Wing elevation is applied to the named glTF wing nodes, about the airframe's forward axis.
     const wing = (index: number, side: 1 | -1) => new NodeTransformationProperty({rotation: new CallbackProperty(() => {
       const {scenario,time} = current.current;
-      return Quaternion.fromAxisAngle(Cartesian3.UNIT_Z, side*(scenario.category==='Bird' ? wingBeat(time.current, index).angle : 0));
+      return Quaternion.fromAxisAngle(Cartesian3.UNIT_Z, side*(scenario.category==='Bird' ? scenario.version===3?sampleFlight(scenario,time.current,index).wing.shoulder:wingBeat(time.current, index).angle : 0));
     }, false)});
+    const rigNodes=(index:number)=>{
+      const nodes:Record<string,NodeTransformationProperty>={'wing-left':wing(index,1),'wing-right':wing(index,-1)};
+      const node=(name:string,axis:Cartesian3,angle:()=>number)=>{nodes[name]=new NodeTransformationProperty({rotation:new CallbackProperty(()=>Quaternion.fromAxisAngle(axis,angle()),false)});};
+      const state=()=>{const s=current.current.scenario;return s.version===3?sampleFlight(s,current.current.time.current,index):undefined;};
+      for(const side of [1,-1])for(const joint of ['elbow','wrist'] as const)node(`${joint}-${side===1?'left':'right'}`,Cartesian3.UNIT_Z,()=>side*(state()?.wing[joint]??0));
+      nodes.tail=new NodeTransformationProperty({rotation:new CallbackProperty(()=>{
+        const s=state(),pitch=Quaternion.fromAxisAngle(Cartesian3.UNIT_X,s?.wing.tail??0),yaw=Quaternion.fromAxisAngle(Cartesian3.UNIT_Y,(s?.angularVelocity[1]??0)*.06);
+        return Quaternion.multiply(pitch,yaw,new Quaternion());
+      },false)});
+      for(let i=0;i<6;i++){
+        nodes[`prop-${i}`]=new NodeTransformationProperty({rotation:new CallbackProperty(()=>{
+          const s=current.current.scenario;if(!s.flight)return Quaternion.IDENTITY;
+          const p=FLIGHT_PROFILES[s.flight.model],m=p.motors[i];if(!m)return Quaternion.IDENTITY;
+          const spin=p.kind==='fixed-wing'?1:p.motors.length===6?(i%2?1:-1):Math.sign(m[0]*m[2]);
+          return Quaternion.fromAxisAngle(p.kind==='fixed-wing'?Cartesian3.UNIT_Z:Cartesian3.UNIT_Y,(state()?.rotorAngles[i]??0)*spin);
+        },false)});
+      }
+      node('aileron-left',Cartesian3.UNIT_X,()=>(state()?.surfaces[2]??0)*.3);node('aileron-right',Cartesian3.UNIT_X,()=>-(state()?.surfaces[2]??0)*.3);
+      node('elevator',Cartesian3.UNIT_X,()=>(state()?.surfaces[0]??0)*.3);node('rudder',Cartesian3.UNIT_Y,()=>(state()?.surfaces[1]??0)*.3);
+      return new PropertyBag(nodes);
+    };
     // Site marker drawn by the app itself; third-party boundary/place overlays are deliberately not used.
     viewer.entities.add({
       id: 'theatre-site',
@@ -142,6 +173,7 @@ export default function EarthScene(props: Props) {
       },
     });
     const contacts: Entity[] = [];
+    const details:boolean[]=[];
     // Entities are added on demand so every generated contact is represented, whatever the count.
     const ensureContacts = (count: number) => {
       while (contacts.length < count) {
@@ -154,14 +186,29 @@ export default function EarthScene(props: Props) {
           model: {
             uri: modelUri(), scale: 1, minimumPixelSize: 0, maximumScale: 24,
             silhouetteColor: Color.fromCssColorString('#ffd25a'), silhouetteSize: 0,
-            nodeTransformations: new PropertyBag({'wing-left': wing(index, 1), 'wing-right': wing(index, -1)}),
+            nodeTransformations: rigNodes(index),
           },
         }));
       }
     };
     let contactConfig = '', lastDatum = NaN;
     const lastCameraPosition = new Cartesian3(), lastCameraDirection = new Cartesian3();
+    let lastFollow=performance.now();
     const update = viewer.scene.preRender.addEventListener(() => {
+      const {pilotCamera,scenario:flightScenario}=current.current;
+      if(pilotCamera&&pilotCamera!=='free'&&flightScenario.flight){
+        navigation.current?.cancel();viewer.camera.cancelFlight();
+        const s=sampleFlight(flightScenario,current.current.time.current,0),forward=rotate(s.orientation,[0,0,1]),up=rotate(s.orientation,[0,1,0]);
+        const localEye=add(s.position,add(scale(forward,pilotCamera==='fpv'?.7:-10),scale(up,pilotCamera==='fpv'?.35:4)));
+        const localLook=add(s.position,scale(forward,pilotCamera==='fpv'?100:2));
+        const toWorld=(p:number[])=>Matrix4.multiplyByPoint(frame(),new Cartesian3(p[0],-p[2],p[1]),new Cartesian3());
+        const eye=toWorld(localEye),look=toWorld(localLook),now=performance.now(),ease=pilotCamera==='fpv'?1:1-Math.exp(-Math.min(.1,(now-lastFollow)/1000)*8);lastFollow=now;
+        const dest=Cartesian3.lerp(viewer.camera.positionWC,eye,ease,new Cartesian3());
+        const direction=Cartesian3.normalize(Cartesian3.subtract(look,dest,new Cartesian3()),new Cartesian3());
+        const worldUp=Matrix4.multiplyByPointAsVector(frame(),new Cartesian3(pilotCamera==='fpv'?up[0]:0,pilotCamera==='fpv'?-up[2]:0,pilotCamera==='fpv'?up[1]:1),new Cartesian3());
+        viewer.camera.frustum.near=.05;
+        viewer.camera.setView({destination:dest,orientation:{direction,up:worldUp}});
+      }else lastFollow=performance.now();
       // Cesium's percentage-based changed event can miss a short drag. Check the pose as well,
       // including native drag inertia, camera flights and asynchronous airspace-datum updates.
       if (!Cartesian3.equals(lastCameraPosition, viewer.camera.positionWC) ||
@@ -172,9 +219,12 @@ export default function EarthScene(props: Props) {
       for (let index=0;index<contacts.length;index++) {
         const contact=contacts[index];
         contact.show=index<scenario.count && time.current>=scenario.arrival;
-        if (contact.model && signature!==contactConfig) {
-          contact.model.uri = new ConstantProperty(modelUri());
-          contact.model.minimumPixelSize = new ConstantProperty(scenario.difficulty==='guided'?22:12);
+        const distance=Cartesian3.distance(viewer.camera.positionWC,contactPoint(index));
+        const detail=scenario.version!==3||distance<(details[index]?180:140);
+        if (contact.model && (signature!==contactConfig||detail!==details[index])) {
+          contact.model.uri = new ConstantProperty(detail?modelUri():modelUri().replace('.glb','-low.glb'));
+          details[index]=detail;
+          contact.model.minimumPixelSize = new ConstantProperty(scenario.version===3?0:scenario.difficulty==='guided'?22:12);
           contact.model.silhouetteSize = new ConstantProperty(selected?1.5:0);
         }
       }
@@ -183,7 +233,8 @@ export default function EarthScene(props: Props) {
     const updateCamera = () => {
       current.current.onBearingChange(Math.round(CesiumMath.toDegrees(viewer.camera.heading))%360);
       const inverse = Matrix4.inverseTransformation(frame(), new Matrix4());
-      const observer = earthRadarObserver(inverse, viewer.camera.positionWC, viewer.camera.directionWC, lookAbove(current.current.theatre));
+      const scenario=current.current.scenario,plane=scenario.flight?Math.min(...scenario.flight.waypoints.map(p=>p[1])):lookAbove(current.current.theatre);
+      const observer = earthRadarObserver(inverse, viewer.camera.positionWC, viewer.camera.directionWC, plane,scenario.version===3?1:8);
       if (observer) current.current.onObserverChange(observer);
       Cartesian3.clone(viewer.camera.positionWC, lastCameraPosition);
       Cartesian3.clone(viewer.camera.directionWC, lastCameraDirection);
@@ -216,7 +267,7 @@ export default function EarthScene(props: Props) {
     navigation.current=attachEarthNavigation(viewer,{
       input:()=>current.current.input,
       fallbackTarget:anchor,
-      onInteraction:()=>{interacted.current=true;},onChange:updateCamera,
+      onInteraction:()=>{interacted.current=true;if(current.current.pilotCamera&&current.current.pilotCamera!=='free')current.current.onFreeCamera?.();},onChange:updateCamera,
     });
     /** Resolves true when Google photorealistic tiles are the rendered surface, false for imagery on terrain. */
     async function loadWorld() {
@@ -267,8 +318,9 @@ export default function EarthScene(props: Props) {
     const theatre=props.theatre;
     navigation.current?.cancel();viewer.camera.cancelFlight();
     interacted.current=false;
-    groundHeight.current=theatre.elevation ?? 0;
+    groundHeight.current=props.scenario.flight?.terrain.datum??theatre.elevation??0;
     frameCamera(viewer, theatre, current.current.cameraView, groundHeight.current, 0);
+    if(props.scenario.version===3){props.onGround?.(groundHeight.current);return;}
     void ready.current.then(async tiles => {
       const ground = await sampleGround(viewer, theatre, tiles);
       if(cancelled||viewer.isDestroyed())return;
@@ -278,7 +330,7 @@ export default function EarthScene(props: Props) {
       if(!interacted.current)frameCamera(viewer, theatre, current.current.cameraView, ground, 1);
     });
     return () => { cancelled=true; };
-  },[props.theatre]);
+  },[props.theatre,props.scenario.version,props.scenario.flight?.terrain.datum]);
   useEffect(() => {
     const viewer=viewerRef.current;
     if(!viewer)return;
@@ -297,9 +349,17 @@ export default function EarthScene(props: Props) {
   },[props.highQuality]);
   useEffect(() => {
     const viewer=viewerRef.current;if(!viewer)return;
-    viewer.clock.currentTime=JulianDate.fromIso8601(props.scenario.dusk?'2026-10-04T12:15:00Z':'2026-10-04T06:00:00Z');
-    viewer.scene.fog.density=props.scenario.difficulty==='challenge'?.0002:.00008;
-  },[props.scenario.dusk,props.scenario.difficulty]);
+    const lighting=lightingOf(props.scenario);
+    viewer.clock.currentTime=JulianDate.fromIso8601(lighting==='night'?'2026-10-04T18:00:00Z':lighting==='dusk'?'2026-10-04T12:15:00Z':'2026-10-04T06:00:00Z');
+    // A color/depth approximation also dims imagery and baked tile textures at night.
+    // Disable the extra sun shading at night to avoid double-darkening the terrain.
+    viewer.scene.globe.enableLighting=lighting!=='night';
+    viewer.scene.fog.density=props.scenario.fog ? .0003 : props.scenario.difficulty==='challenge' ? .0002 : .00008;
+    if(lighting!=='night'&&!props.scenario.fog)return;
+    const stage=earthEnvironmentStage(props.scenario);
+    viewer.scene.postProcessStages.add(stage);
+    return()=>{if(!viewer.isDestroyed())viewer.scene.postProcessStages.remove(stage);};
+  },[props.scenario.lighting,props.scenario.dusk,props.scenario.fog,props.scenario.difficulty]);
   return <>
     <div ref={container} className="earth-canvas" aria-label={`Interactive 3D Earth view of ${props.theatre.name}, ${props.theatre.region}`}/>
     <div className="earth-navigation" role="group" aria-label="Satellite navigation controls">

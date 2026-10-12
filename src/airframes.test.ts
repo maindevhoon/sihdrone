@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {Box3, Mesh, type Object3D} from 'three';
 import {AIRFRAMES,BLACK_KITE,airframeFor,contactSpan} from './airframes';
-import {createBirdModel,createDroneModel} from './contactGeometry';
+import {createBirdModel,createDroneModel,createFlightModel,disposeModel} from './contactGeometry';
 import {createScenario} from './simulation';
 import {VARIATION_SEEDS} from './variations';
 
@@ -24,10 +24,14 @@ const near=(actual:number,expected:number,tolerance=.02)=>Math.abs(actual-expect
 test('each airframe matches its published length, width and height within 2%',()=>{
   for(const airframe of Object.values(AIRFRAMES)){
     if(!airframe.envelope)continue;
-    const {length,width,height,withProps}=airframe.envelope,size=measure(createDroneModel({airframe,lights:false}),withProps);
-    assert.ok(near(size.length,length),`${airframe.name} length ${size.length.toFixed(4)} vs ${length}`);
-    assert.ok(near(size.width,width),`${airframe.name} width ${size.width.toFixed(4)} vs ${width}`);
-    assert.ok(near(size.height,height),`${airframe.name} height ${size.height.toFixed(4)} vs ${height}`);
+    const {length,width,height,withProps}=airframe.envelope;
+    for(const model of [createDroneModel({airframe,lights:false}),createFlightModel(airframe.id,'visible',false,false,'high'),createFlightModel(airframe.id,'visible',false,false,'low')]){
+      const size=measure(model,withProps);
+      assert.ok(near(size.length,length),`${airframe.name} length ${size.length.toFixed(4)} vs ${length}`);
+      assert.ok(near(size.width,width),`${airframe.name} width ${size.width.toFixed(4)} vs ${width}`);
+      assert.ok(near(size.height,height),`${airframe.name} height ${size.height.toFixed(4)} vs ${height}`);
+      disposeModel(model);
+    }
   }
 });
 test('motor layouts reproduce the published diagonal within 1%',()=>{

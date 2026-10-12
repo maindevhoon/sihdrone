@@ -7,23 +7,23 @@ import { useT } from './i18n';
 // Visual cues that separate the three categories in this simulation. They describe what the
 // models and motion here actually do, so the guide stays consistent with the scene.
 const cues: { category: Category; title: string; points: string[] }[] = [
-  { category: 'Single drone', title: 'Multirotor UAS', points: [
-    'Rigid airframe; no wingbeat. Speed changes show as body tilt.',
-    'Smooth, deliberate legs; can slow, hover or reverse.',
+  { category: 'Single drone', title: 'Powered aircraft', points: [
+    'Rigid airframe; no wingbeat. Multirotors tilt into acceleration.',
+    'Multirotors can hover or reverse; fixed-wing aircraft need airspeed and bank to turn.',
     'Red/green navigation lights and a white strobe, most obvious at dusk.',
     'A steady rotor hum that rises in pitch as it manoeuvres.',
     'IR: motors and battery are the hottest points.',
   ] },
   { category: 'Drone group', title: 'Coordinated UAS', points: [
     'Several rigid airframes with matching heading and speed.',
-    'Spacing holds through turns; manoeuvres start together.',
+    'Followers adjust their spacing and respond after the leader turns.',
     'Multiple radar tracks moving as one formation.',
   ] },
-  { category: 'Bird', title: 'Black kite', points: [
-    'Long angled wings with fingered tips; shallow forked tail.',
-    'Long glides on steady wings, with short bursts of slow flapping.',
+  { category: 'Bird', title: 'Kites, crows and pigeons', points: [
+    'Kites have fingered tips and a forked tail; crows a grey neck; pigeons pointed wings and dark wing bars.',
+    'Kites soar between slow flapping bursts; crows flap and glide; pigeons flap rapidly.',
     'Banks steeply into turns; tail twists to steer. No lights.',
-    'No motor hum; a kite is effectively silent at these ranges.',
+    'No motor hum; birds are effectively silent at these ranges.',
     'IR: the whole body is warm, without motor hot spots.',
   ] },
 ];

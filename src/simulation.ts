@@ -1,11 +1,16 @@
-import type { TheatreId } from './theatres';
+import type { Environment } from './environment';
+import { theatreById, type TheatreId } from './theatres';
+import type { FlightDefinition, FlightModelId, TerrainSnapshot, WindPreset } from './flightTypes';
+import { createFlightDefinition } from './flightScenario';
+import { flatTerrain } from './flightTerrain';
+import { sampleFlight } from './flightRuntime';
 export type Category = 'Single drone' | 'Drone group' | 'Bird';
 export type Difficulty = 'guided' | 'challenge';
 export type ExerciseId = 'skyline' | 'passing' | 'mixed';
 export type CameraView = 'overview' | 'rooftop' | 'street';
 export type Position = [number, number, number];
 export type FlightPattern = 'orbit' | 'crossing' | 'figure-eight' | 'weave' | 'approach';
-export type Scenario = { version: 1 | 2; pattern?: FlightPattern; heading?: number; spread?: number; radius?: number; phase?: number; exercise: ExerciseId; seed: number; difficulty: Difficulty; dusk: boolean; duration: number; category: Category; count: number; arrival: number; speed: number; altitude: number; shift: number };
+export type Scenario = Environment & { version: 1 | 2 | 3; flight?: FlightDefinition; pattern?: FlightPattern; heading?: number; spread?: number; radius?: number; phase?: number; exercise: ExerciseId; seed: number; difficulty: Difficulty; dusk: boolean; duration: number; category: Category; count: number; arrival: number; speed: number; altitude: number; shift: number };
 export type SessionEvent = { time: number; type: 'start' | 'observation' | 'classification' | 'pause' | 'resume' | 'finish'; label: string };
 export type Session = { version: 1; id: string; createdAt: string; scenario: Scenario; duration: number; detection: number | null; answer: Category | ''; score: number; detectionScore: number; classificationScore: number; observationValid: boolean; events: SessionEvent[];
   /** Theatre the exercise was flown in; absent on results saved before it was recorded. */
@@ -17,10 +22,15 @@ export const exercises: { id: ExerciseId; title: string; description: string; sh
   { id: 'mixed', title: 'Expect the unexpected', description: 'Each variation brings a different encounter. Observe first, then classify what you actually see.', short: 'Mixed recognition' },
 ];
 export function seededRandom(seed: number) { let state = seed >>> 0; return () => {state += 0x6D2B79F5; let t = state; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296;}; }
-export function createScenario(exercise: ExerciseId, seed: number, difficulty: Difficulty, dusk: boolean, version: 1 | 2 = 2): Scenario {
+export function createScenario(exercise: ExerciseId, seed: number, difficulty: Difficulty, dusk: boolean, version: 1 | 2 | 3 = 2, environment: Environment = {}, flightOptions: {terrain?: TerrainSnapshot; wind?: WindPreset; model?: FlightModelId} = {}): Scenario {
+  // Additive display settings keep both historical trajectory versions unchanged.
+  if (environment.lighting !== undefined) dusk = environment.lighting === 'dusk';
+  const conditions: Environment = {};
+  if (environment.lighting !== undefined) conditions.lighting = environment.lighting;
+  if (environment.fog !== undefined) conditions.fog = environment.fog;
   const random = seededRandom(seed);
   const category: Category = exercise === 'skyline' ? 'Drone group' : exercise === 'passing' ? 'Single drone' : categories[Math.floor(random()*categories.length)];
-  const legacy:Scenario = { version: 1, exercise, seed: seed >>> 0, difficulty, dusk, duration: 45, category,
+  const legacy:Scenario = { ...conditions, version: 1, exercise, seed: seed >>> 0, difficulty, dusk, duration: 45, category,
     count: category === 'Drone group' ? 3 + Math.floor(random()*2) : category === 'Bird' ? 2 : 1,
     arrival: difficulty === 'challenge' ? 5 + random()*2 : 2 + random(),
     speed: (difficulty === 'challenge' ? 1.25 : .8) + random()*.15,
@@ -29,11 +39,15 @@ export function createScenario(exercise: ExerciseId, seed: number, difficulty: D
   };
   if(version===1)return legacy;
   const patterns:FlightPattern[]=['orbit','crossing','figure-eight','weave','approach'];
-  return {...legacy, version:2, pattern:patterns[Math.floor(random()*patterns.length)],heading:random()*Math.PI*2,spread:1.8+random()*2.8,radius:12+random()*9,phase:random()*Math.PI*2,
+  const modern: Scenario = {...legacy, version:2, pattern:patterns[Math.floor(random()*patterns.length)],heading:random()*Math.PI*2,spread:1.8+random()*2.8,radius:12+random()*9,phase:random()*Math.PI*2,
     count:category==='Drone group'?3+Math.floor(random()*3):category==='Bird'?2+Math.floor(random()*3):1,
     speed:(difficulty==='challenge'?1.15:.65)+random()*.65,altitude:(difficulty==='challenge'?21:17)+random()*6,shift:random()*8-4};
+  if(version===2)return modern;
+  const terrain=flightOptions.terrain??flatTerrain(theatreById('district'));
+  return {...modern,version:3,flight:createFlightDefinition(seed,modern.category,terrain,flightOptions.wind,flightOptions.model)};
 }
 export function contactPosition(scenario: Scenario, time: number, index: number): Position {
+  if(scenario.version===3)return sampleFlight(scenario,time,index).position;
   const t = Math.max(0, time - scenario.arrival) * scenario.speed;
   const offset = index - (scenario.count - 1)/2;
   const bird = scenario.category === 'Bird';

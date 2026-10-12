@@ -26,3 +26,19 @@ test('the optional theatre is kept when known, rejected when unknown, and not re
   storage.setItem(STORAGE_KEY,JSON.stringify([recorded,legacy,bogus]));
   assert.deepEqual(readSessions(),[recorded,legacy]);
 });
+
+test('night and fog survive serialization for both scenario versions alongside older records',()=>{
+  for(const version of [1,2] as const){
+    const old=session(1),night=session(2);
+    night.scenario=createScenario('skyline',2,'guided',false,version,{lighting:'night',fog:true});
+    night.detection=night.scenario.arrival+2;
+    Object.assign(night,scoreSession(night.scenario,night.detection,night.answer,night.duration));
+    saveSessions([night,old]);assert.deepEqual(readSessions(),[night,old]);
+  }
+});
+test('unknown lighting, inconsistent legacy dusk and malformed fog are rejected',()=>{
+  for(const patch of [{lighting:'midnight'},{lighting:'night',dusk:true},{lighting:'dusk',dusk:false},{fog:'true'},{fog:null}]){
+    const invalid=session(1),valid=session(2);Object.assign(invalid.scenario,patch);
+    storage.setItem(STORAGE_KEY,JSON.stringify([invalid,valid]));assert.deepEqual(readSessions(),[valid]);
+  }
+});
