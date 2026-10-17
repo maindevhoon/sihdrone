@@ -1,4 +1,6 @@
 import { contactPosition, type Position, type Scenario } from './simulation';
+import { sampleFlight } from './flightRuntime';
+import type { FlightState } from './flightTypes';
 
 // Motion state derived from the shared trajectory. Everything here is a pure function of
 // scenario and exercise time, so renderers, the sensor feed and replay stay in agreement.
@@ -12,6 +14,7 @@ export type Kinematics = {
   forwardAccel: number;
   /** Positive when the acceleration points to the right of travel (a right turn). */
   lateralAccel: number;
+  flight?: FlightState;
 };
 export type Attitude = { pitch: number; roll: number };
 
@@ -19,6 +22,13 @@ const DT = .05, GRAVITY = 9.81;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 export function contactKinematics(scenario: Scenario, time: number, index: number): Kinematics {
+  if(scenario.version===4){
+    const flight=sampleFlight(scenario,time,index),previous=sampleFlight(scenario,time-DT,index),next=sampleFlight(scenario,time+DT,index);
+    const speed=Math.hypot(flight.velocity[0],flight.velocity[2]);
+    const heading=speed>1e-6?(Math.atan2(flight.velocity[0],-flight.velocity[2])+Math.PI*2)%(Math.PI*2):scenario.heading??0;
+    const ax=(next.velocity[0]-previous.velocity[0])/(2*DT),az=(next.velocity[2]-previous.velocity[2])/(2*DT);
+    return {position:flight.position,velocity:flight.velocity,speed,heading,forwardAccel:ax*Math.sin(heading)-az*Math.cos(heading),lateralAccel:ax*Math.cos(heading)+az*Math.sin(heading),flight};
+  }
   const p = contactPosition(scenario, time, index);
   const a = contactPosition(scenario, time - DT, index), b = contactPosition(scenario, time + DT, index);
   const velocity: Position = [(b[0]-a[0])/(2*DT), (b[1]-a[1])/(2*DT), (b[2]-a[2])/(2*DT)];

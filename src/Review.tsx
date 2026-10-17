@@ -1,3 +1,5 @@
+import { lightingOf, visibilityLabel } from './environment';
+import { useFlightPreparation } from './useFlightPreparation';
 import DecisionReview from './DecisionReview';
 import type { ReplayCheckpoint } from './reviewEvidence';
 import type { PracticePlan } from './practice';
@@ -6,7 +8,7 @@ import { variationNumber } from './variations';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Check, ChevronRight, Download, Eye, Flag, Focus, Layers, Pause, Play, Printer, RotateCcw, X } from 'lucide-react';
 import type { Profile } from './storage';
-import { airframeFor, BLACK_KITE } from './airframes';
+import { airframeFor, birdFor } from './airframes';
 import { useT } from './i18n';
 import { theatreById, type Theatre, type TheatreId } from './theatres';
 import { decisionsAt, exercises, formatTime, trackLabel, type CameraView, type Session } from './simulation';
@@ -14,6 +16,7 @@ const SceneView=lazy(()=>import('./SceneView'));
 const noop=()=>{};
 function Replay({session,theatre,onTheatreChange,checkpoint}: {session:Session;theatre:Theatre;onTheatreChange:(id:TheatreId)=>void;checkpoint:ReplayCheckpoint|null}) {
   const t=useT();
+  const preparation=useFlightPreparation(session.scenario);
   const [elapsed,setElapsed]=useState(checkpoint?.time ?? 0);
   const [playing,setPlaying]=useState(false);
   const playingRef=useRef(false);
@@ -24,10 +27,10 @@ function Replay({session,theatre,onTheatreChange,checkpoint}: {session:Session;t
     if(!checkpoint)return;
     changePlaying(false);time.current=checkpoint.time;setElapsed(checkpoint.time);
   },[checkpoint]);
-  useEffect(()=>{if(!playing)return;let previous=performance.now(),frame=0,lastRender=0;
+  useEffect(()=>{if(!playing||!preparation.ready)return;let previous=performance.now(),frame=0,lastRender=0;
     const tick=(now:number)=>{if(!playingRef.current)return;time.current=Math.min(session.duration,time.current+(now-previous)/1000);previous=now;if(now-lastRender>80){setElapsed(time.current);lastRender=now;}
       if(time.current>=session.duration){setElapsed(session.duration);changePlaying(false);return;}frame=requestAnimationFrame(tick);};frame=requestAnimationFrame(tick);const hide=()=>{if(document.hidden)changePlaying(false);};document.addEventListener('visibilitychange',hide);return()=>{cancelAnimationFrame(frame);document.removeEventListener('visibilitychange',hide);};
-  },[playing,session.duration]);
+  },[playing,session.duration,preparation.ready]);
   function seek(value:number){time.current=value;setElapsed(value);}
   function toggle(){if(!playing&&time.current>=session.duration)seek(0);changePlaying(!playing);}
   // The radar shows the operator's assessment only from the moment it was recorded.
@@ -35,7 +38,7 @@ function Replay({session,theatre,onTheatreChange,checkpoint}: {session:Session;t
   const assessment=classifiedAt!==undefined&&elapsed>=classifiedAt?session.answer:'';
   const decisions=session.version===2?decisionsAt(session,elapsed):undefined;
   return <div className="replay-container">{checkpoint&&<div className="replay-checkpoint" role="status"><Focus size={16}/><div><strong>{t('Decision checkpoint')} · {session.version===2?trackLabel(checkpoint.track):t('Encounter')} · {checkpoint.time.toFixed(1)}s</strong><span>{t('Opened paused. Inspect EO/IR or press play to follow the encounter.')}</span></div></div>}<Suspense fallback={<div className="scene scene-loading">Preparing replay…</div>}><SceneView scenario={session.scenario} time={time} displayTime={elapsed} selected={session.detection!==null&&elapsed>=session.detection} phase="replay" replayFocus={checkpoint ?? undefined} replayPlaying={playing} cameraView={camera} onCameraChange={setCamera} onSelect={noop} onPause={()=>changePlaying(false)} assessment={assessment} decisions={decisions} theatre={theatre} onTheatreChange={onTheatreChange}/></Suspense>
-    <div className="replay-controls"><button onClick={toggle} aria-label={playing?'Pause replay':'Play replay'}>{playing?<Pause size={16}/>:<Play size={16}/>}</button><span>{formatTime(elapsed)}</span><div className="replay-track"><input type="range" aria-label="Replay position" min={0} max={session.duration} step={.05} value={elapsed} onChange={e=>seek(Number(e.target.value))}/>{session.events.filter(e=>e.type==='observation'||e.type==='classification').map((event,i)=><span className={`replay-marker marker-${event.type}`} key={i} style={{left:`${session.duration?event.time/session.duration*100:0}%`}} title={`${event.label} at ${event.time.toFixed(1)}s`}/>)}</div><span>{formatTime(session.duration)}</span></div>
+    <div className="replay-controls"><button disabled={!preparation.ready} onClick={toggle} aria-label={playing?'Pause replay':'Play replay'}>{playing?<Pause size={16}/>:<Play size={16}/>}</button><span>{formatTime(elapsed)}</span><div className="replay-track"><input type="range" aria-label="Replay position" disabled={!preparation.ready} min={0} max={session.duration} step={.05} value={elapsed} onChange={e=>seek(Number(e.target.value))}/>{session.events.filter(e=>e.type==='observation'||e.type==='classification').map((event,i)=><span className={`replay-marker marker-${event.type}`} key={i} style={{left:`${session.duration?event.time/session.duration*100:0}%`}} title={`${event.label} at ${event.time.toFixed(1)}s`}/>)}</div><span>{formatTime(session.duration)}</span></div>
     <p className="replay-caption">Same variation, same movement. Amber marks your observation; green marks a classification. Replay does not change the result.</p>
   </div>;
 }
@@ -60,17 +63,17 @@ export default function Review({session,practicePlan,history,profile,theatre,onT
   const rows=assessmentRows(session);
   const identified=rows.filter(row=>row.classificationScore>0).length;
   const contained=perTrack?Array.from(new Set(rows.map(row=>row.category))).join(" + "):session.scenario.category;
-  const airframe=airframeFor(session.scenario);
+  const airframe=airframeFor(session.scenario),bird=birdFor(session.scenario,session.scenario.count-1);
   function exportSession(){const file=new Blob([JSON.stringify(session,null,2)],{type:'application/json'});const url=URL.createObjectURL(file);const link=document.createElement('a');link.href=url;link.download=`trinetra-session-${session.scenario.seed}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   return <div className="review-panel">
-    <div className="review-heading"><span className="review-icon"><Flag size={24}/></span><div><div className="eyebrow">{t('AFTER-ACTION REVIEW')}</div><h2>{t('Debrief')}: {t(definition.short)}</h2></div><span className="tag">{session.scenario.dusk?'DUSK':'DAYLIGHT'}</span></div>
+    <div className="review-heading"><span className="review-icon"><Flag size={24}/></span><div><div className="eyebrow">{t('AFTER-ACTION REVIEW')}</div><h2>{t('Debrief')}: {t(definition.short)}</h2></div><span className="tag">{lightingOf(session.scenario).toUpperCase()}</span></div>
     <div className="print-only print-meta">Trainee: {profile.name||'—'} · Unit/ID: {profile.unit||'—'} · Session {new Date(session.createdAt).toLocaleString()} · Printed {new Date().toLocaleString()}</div>
-    <div className="review-context"><span>{t(definition.short)}</span><span>{t(session.scenario.difficulty==='guided'?'Guided':'Challenge')}</span><span>Variation {variationNumber(session.scenario.seed)?.toString().padStart(3,'0')??'saved'} · Seed {session.scenario.seed}</span>{session.theatre&&<span>{t('Theatre')} · {theatreById(session.theatre).kind==='synthetic'?'Training district':theatreById(session.theatre).name}</span>}</div>
+    <div className="review-context"><span>{t(visibilityLabel(session.scenario))}</span><span>{t(definition.short)}</span><span>{t(session.scenario.difficulty==='guided'?'Guided':'Challenge')}</span><span>Variation {variationNumber(session.scenario.seed)?.toString().padStart(3,'0')??'saved'} · Seed {session.scenario.seed}</span>{session.theatre&&<span>{t('Theatre')} · {theatreById(session.theatre).kind==='synthetic'?'Training district':theatreById(session.theatre).name}</span>}</div>
     <div className="score-row"><div className="score-large">{session.score}<span>/ 100</span><p>{t('Practice score')}</p></div><div className="score-summary"><h3>{perTrack&&rows.some(row=>row.answer)&&!correct?'Review each track.':t(correct?'Correctly classified.':!session.observationValid?'An observation to practice.':session.answer?'A closer look next time.':'Complete the classification.')}</h3><p>{perTrack?`${identified} of ${session.scenario.count} tracks correctly identified. Each track contributes equally to the score; missed tracks earn zero. Inspect the decisions below or replay the encounter.`:correct?`You identified ${session.scenario.category.toLowerCase()}. Review your timing, or replay the encounter from another angle.`:!session.observationValid?'No valid observation was recorded after the objects entered the scene. Start with guided mode and watch the skyline.':`The encounter was ${session.scenario.category.toLowerCase()}. ${session.answer?`You selected ${session.answer.toLowerCase()}.`:'No category was submitted.'} Replay the scene to compare the objects and their movement.`}</p></div></div>
     <div className="review-metrics"><div><Eye size={19}/><span>{t(perTrack?'Mean time after arrival':'Time after arrival')}</span><strong>{reaction===null?t('Not recorded'):`${reaction.toFixed(1)}s`}</strong></div><div>{correct?<Check size={19}/>:<X size={19}/>}<span>{t('Classification')}</span><strong>{perTrack?`${identified}/${session.scenario.count} correct`:t(correct?'Correct':session.answer?'Incorrect':'Not submitted')}</strong></div><div><Layers size={19}/><span>{t('Scene contained')}</span><strong>{t(contained)}</strong></div></div>
-    <div className="airframe-ref"><div><span className="section-label">{t('ENCOUNTER REFERENCE')}</span><strong>{perTrack?`${rows.filter(row=>row.category!=='Bird').length} × ${airframe?.name ?? BLACK_KITE.name}${rows.some(row=>row.category==='Bird')?` · ${rows.filter(row=>row.category==='Bird').length} × ${BLACK_KITE.name}`:''}`:`${session.scenario.count} × ${airframe?airframe.name:BLACK_KITE.name}`}</strong><span>{airframe?airframe.role:'Raptor common over Delhi'}</span></div>
-      <dl>{(airframe?.published??BLACK_KITE.published).map(item=><div key={item.label}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>
-      <small>{airframe?`Published figures (${airframe.source}); the simulated airframe is built to them.`:'Typical published figures for the species; the simulated bird is built to them.'}</small></div>
+    <div className="airframe-ref"><div><span className="section-label">{t('ENCOUNTER REFERENCE')}</span><strong>{perTrack?`${rows.filter(row=>row.category!=='Bird').length} × ${airframe?.name ?? bird.name}${rows.some(row=>row.category==='Bird')?` · ${rows.filter(row=>row.category==='Bird').length} × ${bird.name}`:''}`:`${session.scenario.count} × ${airframe?airframe.name:bird.name}`}</strong><span>{airframe?airframe.role:'Raptor common over Delhi'}</span></div>
+      <dl>{(airframe?.published??bird.published).map(item=><div key={item.label}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>
+      <small>{airframe?.fixedWing?'Published simulation reference mass; original aircraft geometry and aerodynamic coefficients are estimates.':airframe?`Published figures (${airframe.source}); the simulated airframe is built to them.`:'Typical published figures for the species; the simulated bird is built to them.'}</small></div>
     <DecisionReview session={session} onReplay={inspectDecision}/>
     <div className="score-breakdown"><div><span>{t('Observation timing')}</span><span>{session.detectionScore}<i>/40</i></span></div><div className="breakdown-track"><span style={{width:`${session.detectionScore/40*100}%`}}/></div><div><span>{t('Classification')}</span><span>{session.classificationScore}<i>/60</i></span></div><div className="breakdown-track classification-score"><span style={{width:`${session.classificationScore/60*100}%`}}/></div></div>
     <div className="review-actions"><button className="replay-button" onClick={()=>{setCheckpoint(null);setReplay(!replay);}}>{replay?<X size={15}/>:<Play size={15}/>} {t(replay?'Close replay':'Replay session')}</button><button className="text-button" onClick={onRepeat}><RotateCcw size={14}/>{t('Repeat variation')}</button><button className="text-button" onClick={exportSession}><Download size={14}/>{t('Export result')}</button><button className="text-button" onClick={()=>{setReplay(false);setTimeout(()=>window.print(),50);}}><Printer size={14}/>{t('Print report')}</button></div>

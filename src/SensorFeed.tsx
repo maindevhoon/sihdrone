@@ -1,3 +1,4 @@
+import { lightingOf, type Lighting } from './environment';
 import { useMemo, useRef, type MutableRefObject } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { BackSide, Color, PerspectiveCamera, ShaderMaterial, SRGBColorSpace, Vector3, type Mesh } from 'three';
@@ -16,24 +17,25 @@ type Props = {
 // Sensor head on a 3 m mast above the shared radar observer.
 const SENSOR_HEIGHT = 3;
 type Sky = { zenith: number[]; horizon: number[]; ground: number[]; sun: number[] };
-const skies: Record<'day' | 'dusk' | 'ir', Sky> = {
+const skies: Record<Lighting | 'ir', Sky> = {
   day: { zenith: [.44, .59, .75], horizon: [.84, .85, .82], ground: [.44, .42, .37], sun: [1, .96, .86] },
   dusk: { zenith: [.2, .25, .4], horizon: [.92, .63, .43], ground: [.2, .18, .18], sun: [1, .74, .45] },
+  night: { zenith: [.015, .025, .055], horizon: [.075, .10, .15], ground: [.025, .03, .035], sun: [.06, .08, .13] },
   ir: { zenith: [.07, .07, .07], horizon: [.2, .2, .2], ground: [.34, .34, .34], sun: [0, 0, 0] },
 };
-const sunDirection = (dusk: boolean) => new Vector3(...(dusk ? [-70, 3, -80] : [-60, 22, -90])).normalize();
+const sunDirection = (lighting: Lighting) => new Vector3(...(lighting === 'night' ? [-75, 42, -220] : lighting === 'dusk' ? [-70, 3, -80] : [-60, 22, -90])).normalize();
 
 /** Camera-centred gradient sky with horizon haze and a sun glow; colours are written as display values. */
-function SkyDome({ sky, dusk }: { sky: Sky; dusk: boolean }) {
+function SkyDome({ sky, lighting }: { sky: Sky; lighting: Lighting }) {
   const ref = useRef<Mesh>(null);
   const material = useMemo(() => new ShaderMaterial({
     side: BackSide, depthWrite: false, fog: false,
-    uniforms: { zenith: { value: sky.zenith }, horizon: { value: sky.horizon }, ground: { value: sky.ground }, sunColor: { value: sky.sun }, sunDir: { value: sunDirection(dusk) } },
+    uniforms: { zenith: { value: sky.zenith }, horizon: { value: sky.horizon }, ground: { value: sky.ground }, sunColor: { value: sky.sun }, sunDir: { value: sunDirection(lighting) } },
     vertexShader: 'varying vec3 vDir;void main(){vDir=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
     fragmentShader: `uniform vec3 zenith,horizon,ground,sunColor,sunDir;varying vec3 vDir;
       void main(){float h=vDir.y;vec3 c=h>0.?mix(horizon,zenith,pow(min(h*1.35,1.),.6)):mix(horizon*.9,ground,min(-h*8.,1.));
       float s=max(dot(normalize(vDir),sunDir),0.);c+=sunColor*(pow(s,220.)*.85+pow(s,9.)*.14);gl_FragColor=vec4(c,1.);}`,
-  }), [sky, dusk]);
+  }), [sky, lighting]);
   useFrame(({ camera }) => ref.current?.position.copy(camera.position));
   return <mesh ref={ref} material={material} renderOrder={-1} frustumCulled={false}><sphereGeometry args={[3000, 32, 16]} /></mesh>;
 }
@@ -79,19 +81,21 @@ function Gimbal({ scenario, time, track, metresPerUnit, observer=DEFAULT_RADAR_O
   return null;
 }
 
-/** Narrow-field EO (daylight TV) or white-hot IR view slewed to one radar track. */
+/** Narrow-field EO with simulated lighting, or white-hot IR, slewed to one radar track. */
 export default function SensorFeed(props: Props) {
   const { scenario, mode } = props;
-  const sky = mode === 'ir' ? skies.ir : scenario.dusk ? skies.dusk : skies.day;
+  const lighting = lightingOf(scenario), night = lighting === 'night', dusk = lighting === 'dusk';
+  const sky = mode === 'ir' ? skies.ir : skies[lighting];
   const haze = useMemo(() => new Color().setRGB(sky.horizon[0], sky.horizon[1], sky.horizon[2], SRGBColorSpace), [sky]);
   // Exponential haze per metre; Earth-view contacts sit eight times farther away and haze accordingly.
-  const density = mode === 'ir' ? .0009 : scenario.difficulty === 'challenge' ? .0042 : .0019;
+  // IR retains more contrast here, but this is a display approximation, not a weather sensor model.
+  const density = scenario.fog ? (mode === 'ir' ? .003 : .012) : mode === 'ir' ? .0009 : scenario.difficulty === 'challenge' ? .0042 : .0019;
   return <Canvas dpr={[1, 1.5]} gl={{ antialias: true, powerPreference: 'low-power' }} camera={{ fov: 4, near: .1, far: 6000 }} aria-hidden>
     <fogExp2 attach="fog" args={[haze, density]} />
-    <SkyDome sky={sky} dusk={scenario.dusk} />
+    <SkyDome sky={sky} lighting={lighting} />
     {mode === 'eo' && <>
-      <hemisphereLight args={[scenario.dusk ? '#c9b6c4' : '#dfe8f2', '#6d6253', scenario.dusk ? 1.1 : 1.6]} />
-      <directionalLight position={sunDirection(scenario.dusk).multiplyScalar(100)} intensity={scenario.dusk ? 1.6 : 3} color={scenario.dusk ? '#ffbf83' : '#fff0d3'} />
+      <hemisphereLight args={[night ? '#9cb8df' : dusk ? '#c9b6c4' : '#dfe8f2', '#6d6253', night ? .16 : dusk ? 1.1 : 1.6]} />
+      <directionalLight position={sunDirection(lighting).multiplyScalar(100)} intensity={night ? .35 : dusk ? 1.6 : 3} color={night ? '#a6bff2' : dusk ? '#ffbf83' : '#fff0d3'} />
     </>}
     {Array.from({ length: scenario.count }, (_, index) => <ContactModel key={`${mode}-${index}`} scenario={scenario} time={props.time} index={index} palette={mode === 'ir' ? 'thermal' : 'visible'} metresPerUnit={props.metresPerUnit} />)}
     <Gimbal {...props} />

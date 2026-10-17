@@ -52,3 +52,13 @@ test('results group by theatre, with older sessions under Not recorded, and the 
   assert.deepEqual(rows.map(r=>[r.name,r.sessions]),[['Tololing',2],['Not recorded',1]]);
   assert.ok(historyCsv(items).split('\n')[1].includes(',Tololing,'));
 });
+
+test('night is reported separately from day and dusk, and fog appears in the CSV',()=>{
+  const night=session(1);night.scenario={...night.scenario,lighting:'night',fog:true,dusk:false};
+  const day=session(2),dusk=session(3,{dusk:true});
+  const rows=summarize([night,day,dusk]).byCondition.filter(c=>c.difficulty==='guided');
+  assert.deepEqual(rows.map(c=>[c.lighting,c.sessions]),[['day',1],['dusk',1],['night',1]]);
+  const csv=historyCsv([night]).split('\n');
+  assert.ok(csv[0].endsWith(',Visibility'));assert.ok(csv[1].includes(',Night,'));assert.ok(csv[1].endsWith(',Fog'));
+  assert.equal(summarize([night]).readiness.criteria.at(-1)?.met,false);
+});

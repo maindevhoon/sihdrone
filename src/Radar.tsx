@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 import TrackChecklist from './TrackChecklist';
 import { formatTime, visibleContacts, type Category, type Position, type Scenario, type TrackDecision } from './simulation';
@@ -8,7 +8,9 @@ type Props={scenario:Scenario;time:number;selected:boolean;paused:boolean;previe
 const identity=(assessment:Category|'')=>assessment==='Bird'?{key:'neutral',label:'NEUTRAL · BIO'}:assessment?{key:'suspect',label:`SUSPECT · ${assessment==='Drone group'?'UAS GRP':'UAS'}`}:{key:'unknown',label:'UNKNOWN'};
 export default function Radar({scenario,time,selected,paused,preview=false,replay=false,onTogglePreview,bearing=0,metresPerUnit=1,track,assessment='',decisions,observer=DEFAULT_RADAR_OBSERVER,mapFollow=false,onTrack,onSelect}:Props) {
   const uid=useId().replaceAll(':','');
-  const [range,setRange]=useState(60);
+  const ranges=scenario.version===4?[100,250,500,1000]:[30,60,120];
+  const [range,setRange]=useState(scenario.version===4?500:60);
+  useEffect(()=>setRange(scenario.version===4?500:60),[scenario.version]);
   const [headingUp,setHeadingUp]=useState(false);
   const [trails,setTrails]=useState(true);
   const contacts=visibleContacts(scenario,time);
@@ -16,14 +18,14 @@ export default function Radar({scenario,time,selected,paused,preview=false,repla
   const orientation=headingUp?bearing:0;
   const readout=contacts.length?contactReadout(scenario,time,activeId,metresPerUnit,observer):null;
   const inRange=contacts.filter(({position})=>radarRange(position,observer)<=range);
-  const rangeIndex=[30,60,120].indexOf(range);
+  const rangeIndex=ranges.indexOf(range);
   const state=preview?(paused?'PREVIEW · HOLD':'PREVIEW · PLAY'):replay?(paused?'REPLAY · HOLD':'REPLAY'):paused?'HOLD':'LIVE';
   const trackLabel=`T${(activeId+1).toString().padStart(2,'0')}`;
   const id=identity(decisions?.find(item=>item.id===activeId)?.answer ?? assessment);
   function inspect(contact:number){onTrack(contact);if(!paused&&!preview&&!replay)onSelect?.(contact);}
   return <div className={`radar-instrument radar-mfd identity-${id.key}`} data-time={time} data-paused={paused} data-observer={observer.join(",")} aria-label={`Simulated radar. ${inRange.length} contacts in range. ${state}.`}>
     <div className="radar-header"><span>PPI · SURVEILLANCE</span><span className={`radar-state ${paused?'':'radar-live'}`}>{state}</span></div>
-    <div className="radar-controls"><button aria-label="Toggle radar orientation" aria-pressed={headingUp} onClick={()=>setHeadingUp(v=>!v)}>{headingUp?'HDG UP':'NORTH UP'}</button><button aria-label="Toggle radar trails" aria-pressed={trails} onClick={()=>setTrails(v=>!v)}>TRAIL</button><div className="radar-range-controls"><button aria-label="Decrease radar range" disabled={rangeIndex===0} onClick={()=>setRange([30,60,120][rangeIndex-1])}>−</button><span>{range*metresPerUnit}<small>m</small></span><button aria-label="Increase radar range" disabled={rangeIndex===2} onClick={()=>setRange([30,60,120][rangeIndex+1])}>+</button></div></div>
+    <div className="radar-controls"><button aria-label="Toggle radar orientation" aria-pressed={headingUp} onClick={()=>setHeadingUp(v=>!v)}>{headingUp?'HDG UP':'NORTH UP'}</button><button aria-label="Toggle radar trails" aria-pressed={trails} onClick={()=>setTrails(v=>!v)}>TRAIL</button><div className="radar-range-controls"><button aria-label="Decrease radar range" disabled={rangeIndex===0} onClick={()=>setRange(ranges[rangeIndex-1])}>−</button><span>{range*metresPerUnit}<small>m</small></span><button aria-label="Increase radar range" disabled={rangeIndex===ranges.length-1} onClick={()=>setRange(ranges[rangeIndex+1])}>+</button></div></div>
     {preview&&onTogglePreview&&<div className="radar-preview"><button aria-label={paused?'Play radar preview':'Pause radar preview'} onClick={onTogglePreview}>{paused?<Play size={12}/>:<Pause size={12}/>} {paused?'Play sample':'Pause sample'}</button><span>{formatTime(time)} · UNSCORED</span></div>}
     <div className="radar-scope">
       <svg viewBox="0 0 240 240" role="img" aria-label="Simulated radar scope with contact trails and bearing markings" onClick={event=>{

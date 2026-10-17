@@ -1,7 +1,9 @@
 // Trinetra service worker: offline shell and cached build assets. Bump VERSION when this logic changes.
-const VERSION = 'trinetra-v3';
+const VERSION = 'trinetra-v4';
 const SHELL = ['/', '/favicon.svg', '/manifest.webmanifest', '/models/bird.glb',
-  ...['mavic-3', 'phantom-4-pro', 'matrice-350-rtk', 'mini-4-pro'].map(id => `/models/drone-${id}.glb`)];
+  ...['mavic-3', 'phantom-4-pro', 'matrice-350-rtk', 'mini-4-pro'].map(id => `/models/drone-${id}.glb`),
+  '/models/credits.json',
+  ...['mavic-3', 'phantom-4-pro', 'matrice-350-rtk', 'mini-4-pro', 'typhoon-h480', 'rc-cessna', 'black-kite', 'house-crow', 'rock-pigeon'].map(id => `/models/v3-${id}.glb`)];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(VERSION).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });

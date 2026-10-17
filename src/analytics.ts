@@ -1,3 +1,4 @@
+import { lightingLabels, lightingOf, visibilityLabel } from './environment';
 import { categories, contactCategory, exercises, scoreSession, trackLabel, type Category, type Session } from './simulation';
 import { THEATRES, theatreById } from './theatres';
 
@@ -37,9 +38,9 @@ export function summarize(history: Session[]) {
     const items = rows.filter(row => row.category === category);
     return { category, sessions: items.length, accuracy: items.length ? items.filter(row=>row.classificationScore>0).length/items.length : null, meanResponse: mean(items.map(row=>row.response).filter((value):value is number=>value!==null)) };
   });
-  const byCondition = (['guided', 'challenge'] as const).flatMap(difficulty => [false, true].map(dusk => {
-    const sessions = history.filter(s => s.scenario.difficulty === difficulty && s.scenario.dusk === dusk);
-    return { difficulty, dusk, sessions: sessions.length, meanScore: mean(sessions.map(s => s.score)), accuracy: identificationRate(sessions) };
+  const byCondition = (['guided', 'challenge'] as const).flatMap(difficulty => (['day', 'dusk', 'night'] as const).map(lighting => {
+    const sessions = history.filter(s => s.scenario.difficulty === difficulty && lightingOf(s.scenario) === lighting);
+    return { difficulty, lighting, dusk: lighting === 'dusk', sessions: sessions.length, meanScore: mean(sessions.map(s => s.score)), accuracy: identificationRate(sessions) };
   }));
   // Sessions saved before theatres were recorded are grouped as 'Not recorded'.
   const byTheatre = THEATRES.map(t => ({ id: t.id as string, name: t.kind === 'synthetic' ? 'Training district' : t.name, list: history.filter(s => s.theatre === t.id) }))
@@ -66,7 +67,7 @@ export function summarize(history: Session[]) {
     accuracy: identificationRate(history),
     observationRate: rows.length ? rows.filter(row=>row.observationValid).length/rows.length : null,
     meanResponse: mean(times(history)),
-    trend: ordered.map(s => ({ id: s.id, createdAt: s.createdAt, score: s.score, category: s.scenario.version===3&&s.scenario.exercise==='mixed'?'Birds + drones':s.scenario.category, correct: isCorrect(s) })),
+    trend: ordered.map(s => ({ id: s.id, createdAt: s.createdAt, score: s.score, category: s.scenario.version>=3&&s.scenario.exercise==='mixed'?'Birds + drones':s.scenario.category, correct: isCorrect(s) })),
     confusion, byCategory, byCondition, byTheatre, readiness: { level, criteria, met },
   };
 }
@@ -78,12 +79,12 @@ const csvCell = (value: string | number) => {
 };
 /** One row per track (or legacy encounter), oldest sessions first. */
 export function historyCsv(history: Session[]) {
-  const header = ['Date (UTC)', 'Theatre', 'Exercise', 'Difficulty', 'Lighting', 'Seed', 'Scenario version', 'Present', 'Answer', 'Time to observe (s)', 'Observation points', 'Classification points', 'Score', 'Track'];
+  const header = ['Date (UTC)', 'Theatre', 'Exercise', 'Difficulty', 'Lighting', 'Seed', 'Scenario version', 'Present', 'Answer', 'Time to observe (s)', 'Observation points', 'Classification points', 'Score', 'Track', 'Visibility'];
   const rows = chronological(history).flatMap(s => assessmentRows(s).map(row => [
     s.createdAt, s.theatre ? theatreById(s.theatre).name : '', exercises.find(e => e.id === s.scenario.exercise)?.short ?? s.scenario.exercise,
-    s.scenario.difficulty, s.scenario.dusk ? 'Dusk' : 'Day', s.scenario.seed, s.scenario.version,
+    s.scenario.difficulty, lightingLabels[lightingOf(s.scenario)], s.scenario.seed, s.scenario.version,
     row.category, row.answer || 'None', row.response === null ? '' : row.response.toFixed(2),
-    row.detectionScore, row.classificationScore, row.score, s.version===2?trackLabel(row.id):'Encounter',
+    row.detectionScore, row.classificationScore, row.score, s.version===2?trackLabel(row.id):'Encounter', visibilityLabel(s.scenario),
   ]));
   return [header, ...rows].map(row => row.map(csvCell).join(',')).join('\n');
 }
