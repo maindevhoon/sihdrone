@@ -29,6 +29,9 @@ const hi: Record<string, string> = {
   'Observe the Delhi skyline. Identify the aerial objects as they enter the district.': 'आकाश पर नज़र रखें। क्षेत्र में प्रवेश करती हवाई वस्तुओं की पहचान करें।',
   'A brief movement above the rooftops. Practice noticing and identifying a single aerial contact.': 'छतों के ऊपर एक क्षणिक हलचल। किसी एक हवाई संपर्क को देखने और पहचानने का अभ्यास करें।',
   'Each variation brings a different encounter. Observe first, then classify what you actually see.': 'हर संस्करण में अलग सामना होता है। पहले देखें, फिर वही वर्गीकृत करें जो वास्तव में दिखे।',
+  'Birds and drones share the airspace. Inspect each radar track and classify it independently.': 'पक्षी और ड्रोन एक ही हवाई क्षेत्र में हैं। हर रडार ट्रैक को अलग देखकर वर्गीकृत करें।',
+  'Mean time after arrival': 'आगमन के बाद औसत समय',
+  'TARGETED PRACTICE': 'लक्षित अभ्यास', 'Your next exercise': 'आपका अगला अभ्यास', 'Set up targeted practice': 'लक्षित अभ्यास तैयार करें', 'Rule-based recommendation': 'नियम आधारित सुझाव', 'Baseline': 'प्रारंभिक आकलन',
   // Situation panel
   'SITUATION': 'स्थिति', 'Radar · simulated': 'रडार · सिम्युलेटेड', 'OBSERVATION': 'अवलोकन', 'CLASSIFICATION': 'वर्गीकरण',
   'SCANNING': 'स्कैनिंग', 'AWAITING MARK': 'अंकन की प्रतीक्षा', 'NOT STARTED': 'शुरू नहीं हुआ', 'MARKED': 'अंकित',

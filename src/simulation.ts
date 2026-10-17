@@ -5,19 +5,27 @@ export type ExerciseId = 'skyline' | 'passing' | 'mixed';
 export type CameraView = 'overview' | 'rooftop' | 'street';
 export type Position = [number, number, number];
 export type FlightPattern = 'orbit' | 'crossing' | 'figure-eight' | 'weave' | 'approach';
-export type Scenario = { version: 1 | 2; pattern?: FlightPattern; heading?: number; spread?: number; radius?: number; phase?: number; exercise: ExerciseId; seed: number; difficulty: Difficulty; dusk: boolean; duration: number; category: Category; count: number; arrival: number; speed: number; altitude: number; shift: number };
-export type SessionEvent = { time: number; type: 'start' | 'observation' | 'classification' | 'pause' | 'resume' | 'finish'; label: string };
-export type Session = { version: 1; id: string; createdAt: string; scenario: Scenario; duration: number; detection: number | null; answer: Category | ''; score: number; detectionScore: number; classificationScore: number; observationValid: boolean; events: SessionEvent[];
+export type ScenarioVersion = 1 | 2 | 3;
+export type Scenario = { version: ScenarioVersion; pattern?: FlightPattern; heading?: number; spread?: number; radius?: number; phase?: number; exercise: ExerciseId; seed: number; difficulty: Difficulty; dusk: boolean; duration: number; category: Category; count: number; arrival: number; speed: number; altitude: number; shift: number };
+export type TrackDecision = { id: number; detection: number | null; answer: Category | '' };
+export type SessionEvent = { time: number; type: 'start' | 'observation' | 'classification' | 'pause' | 'resume' | 'finish'; label: string; trackId?: number; answer?: Category };
+export type Session = { version: 1 | 2; id: string; createdAt: string; scenario: Scenario; duration: number; detection: number | null; answer: Category | ''; score: number; detectionScore: number; classificationScore: number; observationValid: boolean; events: SessionEvent[]; tracks?: TrackDecision[];
   /** Theatre the exercise was flown in; absent on results saved before it was recorded. */
   theatre?: TheatreId };
 export const categories: Category[] = ['Single drone', 'Drone group', 'Bird'];
 export const exercises: { id: ExerciseId; title: string; description: string; short: string }[] = [
   { id: 'skyline', title: 'Eyes on the horizon', description: 'Observe the Delhi skyline. Identify the aerial objects as they enter the district.', short: 'Skyline watch' },
   { id: 'passing', title: 'A passing silhouette', description: 'A brief movement above the rooftops. Practice noticing and identifying a single aerial contact.', short: 'Passing contact' },
-  { id: 'mixed', title: 'Expect the unexpected', description: 'Each variation brings a different encounter. Observe first, then classify what you actually see.', short: 'Mixed recognition' },
+  { id: 'mixed', title: 'Expect the unexpected', description: 'Birds and drones share the airspace. Inspect each radar track and classify it independently.', short: 'Mixed recognition' },
 ];
 export function seededRandom(seed: number) { let state = seed >>> 0; return () => {state += 0x6D2B79F5; let t = state; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296;}; }
-export function createScenario(exercise: ExerciseId, seed: number, difficulty: Difficulty, dusk: boolean, version: 1 | 2 = 2): Scenario {
+export function createScenario(exercise: ExerciseId, seed: number, difficulty: Difficulty, dusk: boolean, version: ScenarioVersion = 2): Scenario {
+  if (version === 3) {
+    const base = createScenario(exercise, seed, difficulty, dusk, 2);
+    // Separate random stream leaves the numbered seeds and older generators unchanged.
+    const drones = 1 + Math.floor(seededRandom((seed ^ 0x7e31a4b9) >>> 0)() * 3);
+    return {...base, version: 3, ...(exercise === 'mixed' ? {category: drones === 1 ? 'Single drone' as const : 'Drone group' as const, count: drones + 2} : {})};
+  }
   const random = seededRandom(seed);
   const category: Category = exercise === 'skyline' ? 'Drone group' : exercise === 'passing' ? 'Single drone' : categories[Math.floor(random()*categories.length)];
   const legacy:Scenario = { version: 1, exercise, seed: seed >>> 0, difficulty, dusk, duration: 45, category,
@@ -34,6 +42,14 @@ export function createScenario(exercise: ExerciseId, seed: number, difficulty: D
     speed:(difficulty==='challenge'?1.15:.65)+random()*.65,altitude:(difficulty==='challenge'?21:17)+random()*6,shift:random()*8-4};
 }
 export function contactPosition(scenario: Scenario, time: number, index: number): Position {
+  if (scenario.version === 3) {
+    const drones = scenario.exercise === 'mixed' ? scenario.count - 2 : scenario.count;
+    const bird = scenario.exercise === 'mixed' && index >= drones;
+    const route: Scenario = {...scenario, version: 2, category: contactCategory(scenario, index), count: bird ? 2 : drones,
+      heading: (scenario.heading ?? 0) + (bird ? 1.9 : 0), phase: (scenario.phase ?? 0) + (bird ? 2.1 : 0),
+      altitude: scenario.altitude + (bird ? 4 : 0), speed: scenario.speed * (bird ? 1.2 : 1)};
+    return contactPosition(route, time, bird ? index - drones : index);
+  }
   const t = Math.max(0, time - scenario.arrival) * scenario.speed;
   const offset = index - (scenario.count - 1)/2;
   const bird = scenario.category === 'Bird';
@@ -56,6 +72,36 @@ export function contactPosition(scenario: Scenario, time: number, index: number)
     scenario.altitude + Math.sin(t*(bird ? 1.1 : .65) + index)* (bird ? 1.2 : .3) + offset*.45,
     -8 + Math.cos(t*.1)*5 + offset*1.3];
 }
+/** Ground truth is used by rendering/scoring only; radar identities use operator decisions. */
+export function contactCategory(scenario: Pick<Scenario, 'version' | 'exercise' | 'count' | 'category'>, index: number): Category {
+  return scenario.version === 3 && scenario.exercise === 'mixed' && index >= scenario.count - 2 ? 'Bird' : scenario.category;
+}
+export const emptyTrackDecisions = (scenario: Scenario): TrackDecision[] => Array.from({length: scenario.count}, (_, id) => ({id, detection: null, answer: ''}));
+export const trackLabel = (id: number) => `T${(id + 1).toString().padStart(2, '0')}`;
+
+/** Every generated track has equal weight. Missed and unclassified tracks stay in the denominator. */
+export function scoreTracks(scenario: Scenario, tracks: TrackDecision[], duration: number) {
+  const results = emptyTrackDecisions(scenario).map(track => {
+    const decision = tracks.find(item => item.id === track.id) ?? track;
+    return scoreSession({...scenario, category: contactCategory(scenario, track.id)}, decision.detection, decision.answer, duration);
+  });
+  const detectionScore = Math.round(results.reduce((sum, result) => sum + result.detectionScore, 0) / scenario.count);
+  const classificationScore = Math.round(results.reduce((sum, result) => sum + result.classificationScore, 0) / scenario.count);
+  return {score: detectionScore + classificationScore, detectionScore, classificationScore, observationValid: results.some(result => result.observationValid)};
+}
+
+/** Reconstruct decisions at a replay time, including corrections rather than just the final answer. */
+export function decisionsAt(session: Session, time: number): TrackDecision[] {
+  const tracks = emptyTrackDecisions(session.scenario);
+  for (const event of session.events) {
+    if (event.time > time || event.trackId === undefined) continue;
+    const track = tracks[event.trackId];
+    if (!track) continue;
+    if (event.type === 'observation' && track.detection === null) track.detection = event.time;
+    if (event.type === 'classification' && event.answer && track.detection !== null) track.answer = event.answer;
+  }
+  return tracks;
+}
 export function visibleContacts(scenario: Scenario, time: number): { id: number; position: Position }[] {
   if (time < scenario.arrival) return [];
   return Array.from({length: scenario.count},(_,id)=>({id,position:contactPosition(scenario,time,id)}));
@@ -69,6 +115,13 @@ export function scoreSession(scenario: Scenario, detection: number | null, answe
 }
 export const formatTime = (time: number) => `${Math.floor(time/60).toString().padStart(2,'0')}:${Math.floor(time%60).toString().padStart(2,'0')}`;
 export function recommendation(session: Session) {
+  if (session.version === 2 && session.tracks) {
+    const missed = session.tracks.filter(track => track.detection === null).length;
+    const wrong = session.tracks.filter(track => track.detection !== null && track.answer !== contactCategory(session.scenario, track.id)).length;
+    if (missed) return `${missed} track(s) were not observed. Repeat this variation and scan every radar return before classifying.`;
+    if (wrong) return `${wrong} observed track(s) need another look. Compare each silhouette and movement in EO/IR before classifying.`;
+    return session.detectionScore < 25 ? 'All tracks were identified. Repeat this variation to practise observing each track sooner.' : 'All tracks were identified. Try a new variation or challenge mode.';
+  }
   if (!session.observationValid) return 'Let the objects enter the district before recording an observation. Try skyline watch in guided mode.';
   if (session.answer !== session.scenario.category) return `The encounter was ${session.scenario.category.toLowerCase()}. Repeat this variation and compare the silhouette and movement before choosing a category.`;
   if (session.detectionScore < 25) return 'Your classification was correct. Repeat the variation and practice noticing the objects sooner after they enter the scene.';

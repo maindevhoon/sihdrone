@@ -6,11 +6,11 @@ A React + Three.js prototype for the recognition and after-action-review portion
 
 ## Try an exercise
 
-1. Choose **Skyline watch**, **Passing contact**, or **Mixed recognition**.
+1. Choose **Skyline watch**, **Passing contact**, or **Mixed recognition**. New mixed exercises contain birds and drones together.
 2. Choose guided/challenge difficulty and daylight/dusk. Shuffle the variation for different reproducible motion and encounters.
 3. Select an overview, rooftop, or street-level camera. Drag to orbit and scroll to zoom. The heading tape and radar show where to look.
 4. Press **Start exercise**. The objects enter after a short delay. Click an aircraft, click its radar track, or use **Mark observation**.
-5. The EO/IR sensor feed slews to the selected track. Confirm the type in the daylight (EO) or white-hot thermal (IR) view, then choose a category.
+5. The EO/IR sensor feed slews to the selected track. Confirm the type in the daylight (EO) or white-hot thermal (IR) view, then choose a category for that track. Repeat for every radar track; each member of a drone formation is classified as **Drone group**.
 6. End early, or let the 45-second clock finish automatically. The debrief explains the score, preserves the event timeline, and lets you replay, repeat, export or print the session.
 7. **Progress** summarises every stored session: score trend, identification matrix, per-category and per-condition results, practice milestones, and a CSV export for instructors.
 
@@ -34,7 +34,7 @@ Keyboard shortcuts outside form controls: **Space** starts/holds/resumes, **O** 
 - An installable progressive web app: production builds register a service worker so the 3D district works offline after the first visit (Earth imagery still needs a connection).
 - Guided and challenge modes vary appearance timing, altitude, movement speed, and haze.
 - Smooth camera transitions, fullscreen, and balanced/high graphics settings.
-- A score breakdown based on classification and observation time after object arrival. Classification earns credit only after a valid observation.
+- A per-track score breakdown based on classification and observation time after object arrival. Every generated track has equal weight, including missed tracks. Classification earns credit only after a valid observation.
 - Up to 20 browser-local results, a chart of recorded scores, JSON result export, and recommendations from explicit rules.
 - Timeline replay with seeking and markers for recorded decisions. Replay never writes to the original result.
 
@@ -77,7 +77,7 @@ Scenario movement, contact attitude, the sensor feed and the scoring rubric are 
 
 ## Theatres and Earth view
 
-The **Theatre** selector (mission setup or sensor HUD) chooses where the exercise is viewed. The trajectories, radar and scoring are identical in every theatre; only the scene changes. The choice is remembered per browser and is not stored in sessions.
+The **Theatre** selector (mission setup or sensor HUD) chooses where the exercise is viewed. The trajectories, radar and scoring are identical in every theatre; only the scene changes. The choice is remembered per browser and recorded as an optional theatre id in completed sessions. Older sessions without it remain valid.
 
 | Theatre | Location | Terrain |
 | --- | --- | --- |
@@ -115,6 +115,16 @@ Earth mode shows **MAP FOLLOW**: panning translates the radar observer with the 
 
 Visual reference: the range rings, heading references, ownship indicator and multifunction-display framing of [Falcon BMS's F-16 situation display](https://cdn.falcon-bms.com/docs/4.38/TO%201F-16CMAM-34-1-1%20BMS.pdf). The app uses an illustrative PPI layout with synthetic ground-relative returns; it does not reproduce an operational fighter radar or sensor physics.
 
-The setup now exposes 200 numbered, deterministic variations in a selector and shows their full seed values. Shuffle visits all 200 without repetition within a cycle. Version-two scenarios add orbit, crossing, figure-eight, weave and approach paths, direction, formation spacing, speed, altitude and phase variation. Version-one saved sessions retain their original paths when replayed or repeated. The session schema/storage key remain compatible; scenario generation is separately versioned.
+The setup now exposes 200 numbered, deterministic variations in a selector and shows their full seed values. Shuffle visits all 200 without repetition within a cycle. Version-two scenarios add orbit, crossing, figure-eight, weave and approach paths, direction, formation spacing, speed, altitude and phase variation. New exercises use scenario version three: mixed encounters combine one to three drones with two birds on separate deterministic routes. Other exercises retain version-two routes while recording decisions per track. Saved scenario versions one and two retain their original paths when replayed or repeated. New per-track sessions use session version two, with ordered track decisions and timestamped observation/classification events. Session version one and scenario versions one/two retain their original scoring and replay paths. Both session versions share the existing `aeron-sessions-v1` storage key; no saved records or preferences are migrated or deleted. New code reads both formats; older app versions cannot read version-two results.
 
 Verification includes all 200 seeded routes within the default scope, heading projection, readout scaling, shuffle cycles, legacy saves and trajectory validation. Browser checks exercised 100 distinct shuffles, radar controls, contact inspection/observation, pause freeze, and mobile layout.
+
+## Per-track recognition
+
+Choose **Mixed recognition**, start the exercise, and inspect each numbered radar track. A live radar click records an observation for that track and cues EO/IR. Classify the selected track with the buttons or **1 / 2 / 3**; **T** changes the selection and **O** observes it. Preview and replay inspections are unscored. Radar identities update independently from the operator's answers and never disclose the ground truth during an exercise. Pause freezes motion and blocks scored decisions.
+
+The debrief lists every track's true category, submitted answer, response time and score. Observation timing contributes up to 40 points and a correct identification after observation adds 60. Component scores are averaged across all generated tracks and rounded; a missed track contributes zero. Replay reconstructs answers and corrections at their recorded times without changing the saved result. Progress counts individual track decisions (one encounter for legacy sessions); CSV export includes one row per track, with a Track column.
+
+## Adaptive practice
+
+The debrief and Progress page recommend a fresh numbered variation using recorded per-track errors, missed observations, category coverage and day/dusk conditions. The recommendation shows its supporting counts and flags limited evidence. **Set up targeted practice** configures the exercise without starting its clock. This is a deterministic rule-based planner, not a learned AI instructor or an operational proficiency assessment. Legacy records contribute their original encounter-level decisions.

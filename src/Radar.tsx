@@ -1,11 +1,11 @@
 import { useId, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
-import { formatTime, visibleContacts, type Category, type Position, type Scenario } from './simulation';
+import { formatTime, visibleContacts, type Category, type Position, type Scenario, type TrackDecision } from './simulation';
 import { contactReadout, contactTrail, DEFAULT_RADAR_OBSERVER, pickRadarContact, projectContact, radarRange, SCOPE_CENTER as C, SCOPE_RADIUS as R } from './radarMath';
-type Props={scenario:Scenario;time:number;selected:boolean;paused:boolean;preview?:boolean;replay?:boolean;onTogglePreview?:()=>void;bearing?:number;metresPerUnit?:number;track:number;assessment?:Category|'';observer?:Position;mapFollow?:boolean;onTrack:(id:number)=>void;onSelect?:()=>void};
+type Props={scenario:Scenario;time:number;selected:boolean;paused:boolean;preview?:boolean;replay?:boolean;onTogglePreview?:()=>void;bearing?:number;metresPerUnit?:number;track:number;assessment?:Category|'';decisions?:TrackDecision[];observer?:Position;mapFollow?:boolean;onTrack:(id:number)=>void;onSelect?:(id:number)=>void};
 // Track identity follows the operator's assessment, never the scenario's ground truth.
 const identity=(assessment:Category|'')=>assessment==='Bird'?{key:'neutral',label:'NEUTRAL · BIO'}:assessment?{key:'suspect',label:`SUSPECT · ${assessment==='Drone group'?'UAS GRP':'UAS'}`}:{key:'unknown',label:'UNKNOWN'};
-export default function Radar({scenario,time,selected,paused,preview=false,replay=false,onTogglePreview,bearing=0,metresPerUnit=1,track,assessment='',observer=DEFAULT_RADAR_OBSERVER,mapFollow=false,onTrack,onSelect}:Props) {
+export default function Radar({scenario,time,selected,paused,preview=false,replay=false,onTogglePreview,bearing=0,metresPerUnit=1,track,assessment='',decisions,observer=DEFAULT_RADAR_OBSERVER,mapFollow=false,onTrack,onSelect}:Props) {
   const uid=useId().replaceAll(':','');
   const [range,setRange]=useState(60);
   const [headingUp,setHeadingUp]=useState(false);
@@ -18,8 +18,8 @@ export default function Radar({scenario,time,selected,paused,preview=false,repla
   const rangeIndex=[30,60,120].indexOf(range);
   const state=preview?(paused?'PREVIEW · HOLD':'PREVIEW · PLAY'):replay?(paused?'REPLAY · HOLD':'REPLAY'):paused?'HOLD':'LIVE';
   const trackLabel=`T${(activeId+1).toString().padStart(2,'0')}`;
-  const id=identity(assessment);
-  function inspect(contact:number){onTrack(contact);if(!paused&&!preview&&!replay)onSelect?.();}
+  const id=identity(decisions?.find(item=>item.id===activeId)?.answer ?? assessment);
+  function inspect(contact:number){onTrack(contact);if(!paused&&!preview&&!replay)onSelect?.(contact);}
   return <div className={`radar-instrument radar-mfd identity-${id.key}`} data-time={time} data-paused={paused} data-observer={observer.join(",")} aria-label={`Simulated radar. ${inRange.length} contacts in range. ${state}.`}>
     <div className="radar-header"><span>PPI · SURVEILLANCE</span><span className={`radar-state ${paused?'':'radar-live'}`}>{state}</span></div>
     <div className="radar-controls"><button aria-label="Toggle radar orientation" aria-pressed={headingUp} onClick={()=>setHeadingUp(v=>!v)}>{headingUp?'HDG UP':'NORTH UP'}</button><button aria-label="Toggle radar trails" aria-pressed={trails} onClick={()=>setTrails(v=>!v)}>TRAIL</button><div className="radar-range-controls"><button aria-label="Decrease radar range" disabled={rangeIndex===0} onClick={()=>setRange([30,60,120][rangeIndex-1])}>−</button><span>{range*metresPerUnit}<small>m</small></span><button aria-label="Increase radar range" disabled={rangeIndex===2} onClick={()=>setRange([30,60,120][rangeIndex+1])}>+</button></div></div>
@@ -46,12 +46,13 @@ export default function Radar({scenario,time,selected,paused,preview=false,repla
           {inRange.map(({id:contact,position})=>{
             const [x,y]=projectContact(position,range,orientation,observer);
             const active=contact===activeId;
+            const trackIdentity=identity(decisions?.find(item=>item.id===contact)?.answer ?? assessment);
             const points=contactTrail(scenario,time,contact,range,orientation,observer);
             return <g key={contact}>
               {trails&&<polyline points={points.map(p=>p.join(',')).join(' ')} fill="none" stroke="currentColor" className="radar-trail" strokeWidth="1" strokeOpacity=".4"/>}
-              <g data-contact={contact} transform={`translate(${x} ${y})`} className={`radar-track ${active?'active-track':''}`}>
+              <g data-contact={contact} transform={`translate(${x} ${y})`} className={`radar-track ${active?'active-track':''}`} style={{color:trackIdentity.key==='suspect'?'#ff8073':trackIdentity.key==='neutral'?'#72e5ad':'#ffd25a'}}>
                 <circle r="7" fill="currentColor" opacity=".08"/>
-                {id.key==='suspect'?<path d="M0-5L5 0 0 5-5 0Z" fill="none" stroke="currentColor" strokeWidth="1.3"/>:<path d="M-3.5-3.5h7v7h-7Z" fill="none" stroke="currentColor" strokeWidth="1.3"/>}
+                {trackIdentity.key==='suspect'?<path d="M0-5L5 0 0 5-5 0Z" fill="none" stroke="currentColor" strokeWidth="1.3"/>:<path d="M-3.5-3.5h7v7h-7Z" fill="none" stroke="currentColor" strokeWidth="1.3"/>}
                 {active&&(selected||preview||replay)&&<path d="M-8-3v-5h5M3-8h5v5M8 3v5H3M-3 8h-5V3" fill="none" stroke="currentColor" strokeWidth="1.1"/>}
                 <text x="7" y="-5" className="scope-track-label">{contact+1}</text>
               </g>

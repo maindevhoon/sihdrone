@@ -3,9 +3,10 @@ import { CheckCircle2, Circle, Download, Printer, Target, Timer, TrendingUp, Tro
 import { summarize, historyCsv, type Answer } from './analytics';
 import { categories, type Session } from './simulation';
 import type { Profile } from './storage';
+import type { PracticePlan } from './practice';
 import { useT } from './i18n';
 
-type Props = { history: Session[]; profile: Profile; onProfile: (profile: Profile) => void; onOpenSession: (id: string) => void; onStart: () => void };
+type Props = { practicePlan:PracticePlan; onPractice:()=>void; history: Session[]; profile: Profile; onProfile: (profile: Profile) => void; onOpenSession: (id: string) => void; onStart: () => void };
 const pct = (value: number | null) => value === null ? '—' : `${Math.round(value*100)}%`;
 const secs = (value: number | null) => value === null ? '—' : `${value.toFixed(1)} s`;
 const W = 640, H = 220, PAD = { l: 34, r: 14, t: 14, b: 26 };
@@ -36,7 +37,7 @@ function ScoreTrend({ trend, onOpen }: { trend: ReturnType<typeof summarize>['tr
   </div>;
 }
 
-export default function Progress({ history, profile, onProfile, onOpenSession, onStart }: Props) {
+export default function Progress({ history, practicePlan, onPractice, profile, onProfile, onOpenSession, onStart }: Props) {
   const summary = useMemo(() => summarize(history), [history]);
   const t = useT();
   const maxCell = Math.max(1, ...categories.flatMap(actual => Object.values(summary.confusion[actual])));
@@ -58,6 +59,7 @@ export default function Progress({ history, profile, onProfile, onOpenSession, o
       <div className="progress-actions"><button className="text-button" disabled={!history.length} onClick={exportCsv}><Download size={14} />{t('Export CSV')}</button><button className="text-button" onClick={() => window.print()}><Printer size={14} />{t('Print record')}</button></div>
     </header>
     <div className="print-only print-meta">Trainee: {profile.name || '—'} · Unit/ID: {profile.unit || '—'} · Generated {new Date().toLocaleString()}</div>
+    <section className="practice-plan" aria-label="Adaptive practice recommendation"><div><span className="section-label">{t('TARGETED PRACTICE')} · {t(practicePlan.focus)}</span><h3>{t('Your next exercise')}</h3><p>{practicePlan.reason}</p><small>{practicePlan.evidence}</small><small>{t('Rule-based recommendation')} · {t(practicePlan.difficulty==='guided'?'Guided':'Challenge')} · {t(practicePlan.dusk?'Dusk':'Day')} · Seed {practicePlan.seed}</small></div><button className="primary-button" onClick={onPractice}>{t('Set up targeted practice')}</button></section>
     {!history.length ? <div className="empty-state"><Crosshair size={28} /><h3>{t('No sessions yet')}</h3><p>Complete an exercise and its debrief to start building a training record.</p><button className="primary-button" onClick={onStart}>{t('Go to exercise')}</button></div> : <>
       <section className="kpi-row" aria-label="Key figures">
         <div className="kpi"><span>{t('Sessions')}</span><strong>{summary.sessions}</strong><small>Best {summary.bestScore}/100</small></div>
@@ -71,11 +73,11 @@ export default function Progress({ history, profile, onProfile, onOpenSession, o
         <section className="progress-card"><h3>{t('Milestones')}</h3><ul className="criteria">{summary.readiness.criteria.map(c => <li key={c.label} className={c.met ? 'met' : ''}>{c.met ? <CheckCircle2 size={16} aria-label="Met" /> : <Circle size={16} aria-label="Not met" />}<div><strong>{c.label}</strong><span>{c.detail}</span></div></li>)}</ul>
           <p className="chart-caption">Illustrative practice targets, not an operational qualification.</p></section>
         <section className="progress-card span-2"><h3>{t('Identification matrix')}</h3>
-          <div className="table-scroll"><table className="confusion"><caption>Rows: what was present. Columns: what was reported.</caption>
+          <div className="table-scroll"><table className="confusion"><caption>One entry per track (or legacy encounter). Rows: present. Columns: reported.</caption>
             <thead><tr><th scope="col">Present ↓ / Reported →</th>{answers.map(a => <th key={a} scope="col">{a === 'None' ? 'No answer' : a}</th>)}</tr></thead>
             <tbody>{categories.map(actual => <tr key={actual}><th scope="row">{actual}</th>{answers.map(a => { const n = summary.confusion[actual][a]; return <td key={a} className={a === actual ? 'diagonal' : ''} style={{ ['--fill' as string]: n/maxCell }} title={`${actual} reported as ${a === 'None' ? 'no answer' : a}: ${n}`}>{n}</td>; })}</tr>)}</tbody>
           </table></div></section>
-        <section className="progress-card"><h3>{t('By category')}</h3><table className="data-table"><thead><tr><th scope="col">Category</th><th scope="col">Runs</th><th scope="col">Correct</th><th scope="col">Observe</th></tr></thead>
+        <section className="progress-card"><h3>{t('By category')}</h3><table className="data-table"><thead><tr><th scope="col">Category</th><th scope="col">Decisions</th><th scope="col">Correct</th><th scope="col">Observe</th></tr></thead>
           <tbody>{summary.byCategory.map(row => <tr key={row.category}><th scope="row">{row.category}</th><td>{row.sessions}</td><td><span className="inline-bar"><i style={{ width: `${(row.accuracy ?? 0)*100}%` }} /></span>{pct(row.accuracy)}</td><td>{secs(row.meanResponse)}</td></tr>)}</tbody></table></section>
         <section className="progress-card span-3"><h3>{t('By theatre')}</h3><div className="table-scroll"><table className="data-table"><thead><tr><th scope="col">Theatre</th><th scope="col">Runs</th><th scope="col">Mean score</th><th scope="col">Correct</th></tr></thead>
           <tbody>{summary.byTheatre.map(row => <tr key={row.id}><th scope="row">{row.name}</th><td>{row.sessions}</td><td>{row.meanScore === null ? '—' : Math.round(row.meanScore)}</td><td><span className="inline-bar"><i style={{ width: `${row.accuracy*100}%` }} /></span>{pct(row.accuracy)}</td></tr>)}</tbody></table></div></section>

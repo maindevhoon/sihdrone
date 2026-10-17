@@ -1,13 +1,14 @@
 import { memo, useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Html, OrbitControls, RoundedBox, Sky } from '@react-three/drei';
+import { OrbitControls, RoundedBox, Sky } from '@react-three/drei';
 import { CanvasTexture, Color, Group, MeshLambertMaterial, RepeatWrapping, Shape, SRGBColorSpace, Vector3, type Material, type Mesh, type MeshStandardMaterial, type Object3D } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { useThree } from '@react-three/fiber';
 import type { Scenario, CameraView } from './simulation';
 import ContactModel from './ContactModel';
+import TrackGate from './TrackGate';
 
-type SceneProps = { scenario: Scenario; time: MutableRefObject<number>; selected: boolean; onSelect: () => void; cameraView: CameraView; onBearingChange:(bearing:number)=>void; highQuality:boolean; thermal?:boolean };
+type SceneProps = { scenario: Scenario; time: MutableRefObject<number>; selected: boolean; highlightedTrack?:number; onSelect: (id: number) => void; cameraView: CameraView; onBearingChange:(bearing:number)=>void; highQuality:boolean; thermal?:boolean };
 /**
  * Apparent temperature (0 cold – 1 hot) of a district surface for the long-wave IR view: emitters
  * are hottest, sun-loaded dark surfaces (asphalt, tyres) warm, vegetation and glass cool.
@@ -155,7 +156,7 @@ function Metro({time}: {time:MutableRefObject<number>}) {
     </group>)}</group>
   </group>;
 }
-export default memo(function DelhiScene({scenario,time,selected,onSelect,cameraView,onBearingChange,highQuality,thermal=false}: SceneProps) {
+export default memo(function DelhiScene({scenario,time,selected,highlightedTrack,onSelect,cameraView,onBearingChange,highQuality,thermal=false}: SceneProps) {
   const dusk=scenario.dusk;
   const textures=useMemo(()=>({stone:surfaceTexture('stone'),road:surfaceTexture('road'),grass:surfaceTexture('grass'),facade:surfaceTexture('facade',dusk)}),[dusk]);
   useEffect(()=>()=>{Object.values(textures).forEach(texture=>texture.dispose());},[textures]);
@@ -193,7 +194,7 @@ export default memo(function DelhiScene({scenario,time,selected,onSelect,cameraV
     {[0,1,2,3,4,5,6,7].map(i=><Car key={i} lane={i%2?3.4:-3.4} start={i*18+5} variant={i===6?'bus':i===7?'rickshaw':'car'} color={['#e4dfd0','#b7c8c8','#b97553','#ede9df','#739288','#d4caaa','#bf5950','#4b9661'][i]} time={time}/>)}
     {Array.from({length:scenario.count},(_,index)=><ContactModel key={index} index={index} scenario={scenario} time={time} onSelect={onSelect} palette={thermal?'thermal':'visible'}>
       {/* After an observation the sensor overlays a track gate, as an EO tracker would. */}
-      {selected&&<Html center zIndexRange={[2,0]} style={{pointerEvents:'none'}}><div className="track-gate"><span>T{(index+1).toString().padStart(2,'0')}</span></div></Html>}
+      {selected&&(highlightedTrack===undefined||highlightedTrack===index)&&<TrackGate scenario={scenario} time={time} index={index}/>}
     </ContactModel>)}
     <CameraRig view={cameraView} onBearingChange={onBearingChange}/>
     <ThermalLook enabled={thermal} dusk={dusk}/>

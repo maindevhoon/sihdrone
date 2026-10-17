@@ -7,7 +7,7 @@ import {
   type Entity,
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { contactPosition, type CameraView, type Position, type Scenario } from './simulation';
+import { contactCategory, contactPosition, type CameraView, type Position, type Scenario } from './simulation';
 import { earthRadarObserver } from './earthRadarObserver';
 import { attachEarthNavigation, type EarthNavigation } from './earthNavigation';
 import type { NavigationInput } from './earthNavigationMath';
@@ -18,8 +18,8 @@ import { airframeFor } from './airframes';
 import { cameraFraming, groundSamplePoints, type Theatre } from './theatres';
 
 type Props = {
-  scenario: Scenario; time: MutableRefObject<number>; selected: boolean; theatre: Theatre; labels: boolean;
-  cameraView: CameraView; highQuality: boolean; onSelect: () => void;
+  scenario: Scenario; time: MutableRefObject<number>; selected: boolean; highlightedTrack?: number; theatre: Theatre; labels: boolean;
+  cameraView: CameraView; highQuality: boolean; onSelect: (id: number) => void;
   onBearingChange: (bearing: number) => void; onStatus: (status: string) => void; onGround?: (height: number) => void;
   onObserverChange: (observer: Position) => void;
   onHome:()=>void; onTutorialOpen:()=>void; input:NavigationInput; onInputChange:(input:NavigationInput)=>void;
@@ -119,15 +119,15 @@ export default function EarthScene(props: Props) {
       return Matrix4.multiplyByPoint(frame(), new Cartesian3(x*8,-z*8,y*8), result || new Cartesian3());
     };
     // Real-size airframes; Cesium enlarges them to a minimum on-screen size so they stay detectable.
-    const modelUri = () => {const airframe=airframeFor(current.current.scenario);return `/models/${airframe?`drone-${airframe.id}`:'bird'}.glb`;};
+    const modelUri = (index = 0) => {const airframe=airframeFor(current.current.scenario, index);return `/models/${airframe?`drone-${airframe.id}`:'bird'}.glb`;};
     const attitude = (index: number) => {
       const {scenario,time} = current.current, k = contactKinematics(scenario, time.current, index);
-      return {k, a: scenario.category==='Bird' ? birdAttitude(k) : droneAttitude(k)};
+      return {k, a: contactCategory(scenario, index)==='Bird' ? birdAttitude(k) : droneAttitude(k)};
     };
     // Wing elevation is applied to the named glTF wing nodes, about the airframe's forward axis.
     const wing = (index: number, side: 1 | -1) => new NodeTransformationProperty({rotation: new CallbackProperty(() => {
       const {scenario,time} = current.current;
-      return Quaternion.fromAxisAngle(Cartesian3.UNIT_Z, side*(scenario.category==='Bird' ? wingBeat(time.current, index).angle : 0));
+      return Quaternion.fromAxisAngle(Cartesian3.UNIT_Z, side*(contactCategory(scenario, index)==='Bird' ? wingBeat(time.current, index).angle : 0));
     }, false)});
     // Site marker drawn by the app itself; third-party boundary/place overlays are deliberately not used.
     viewer.entities.add({
@@ -152,7 +152,7 @@ export default function EarthScene(props: Props) {
           // glTF noses point along +Z, which Cesium presents as local east at zero heading.
           orientation: new CallbackProperty(() => {const {k,a} = attitude(index); return Transforms.headingPitchRollQuaternion(contactPoint(index), new HeadingPitchRoll(k.heading - Math.PI/2, -a.pitch, a.roll));}, false),
           model: {
-            uri: modelUri(), scale: 1, minimumPixelSize: 0, maximumScale: 24,
+            uri: modelUri(index), scale: 1, minimumPixelSize: 0, maximumScale: 24,
             silhouetteColor: Color.fromCssColorString('#ffd25a'), silhouetteSize: 0,
             nodeTransformations: new PropertyBag({'wing-left': wing(index, 1), 'wing-right': wing(index, -1)}),
           },
@@ -166,16 +166,16 @@ export default function EarthScene(props: Props) {
       // including native drag inertia, camera flights and asynchronous airspace-datum updates.
       if (!Cartesian3.equals(lastCameraPosition, viewer.camera.positionWC) ||
           !Cartesian3.equals(lastCameraDirection, viewer.camera.directionWC) || lastDatum !== groundHeight.current) updateCamera();
-      const {scenario,time,selected} = current.current;
+      const {scenario,time,selected,highlightedTrack} = current.current;
       ensureContacts(scenario.count);
-      const signature=`${modelUri()}/${scenario.difficulty}/${selected}/${scenario.count}`;
+      const signature=`${scenario.version}/${scenario.exercise}/${scenario.seed}/${modelUri()}/${scenario.difficulty}/${selected}/${highlightedTrack}/${scenario.count}`;
       for (let index=0;index<contacts.length;index++) {
         const contact=contacts[index];
         contact.show=index<scenario.count && time.current>=scenario.arrival;
         if (contact.model && signature!==contactConfig) {
-          contact.model.uri = new ConstantProperty(modelUri());
+          contact.model.uri = new ConstantProperty(modelUri(index));
           contact.model.minimumPixelSize = new ConstantProperty(scenario.difficulty==='guided'?22:12);
-          contact.model.silhouetteSize = new ConstantProperty(selected?1.5:0);
+          contact.model.silhouetteSize = new ConstantProperty(selected&&(highlightedTrack===undefined||highlightedTrack===index)?1.5:0);
         }
       }
       contactConfig=signature;
@@ -203,7 +203,7 @@ export default function EarthScene(props: Props) {
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
     handler.setInputAction((event: {position: Cartesian2}) => {
       const pick=viewer.scene.pick(event.position);
-      if(pick?.id instanceof Object && typeof pick.id.id==='string' && pick.id.id.startsWith('training-contact-')) current.current.onSelect();
+      if(pick?.id instanceof Object && typeof pick.id.id==='string' && pick.id.id.startsWith('training-contact-')) current.current.onSelect(Number(pick.id.id.slice('training-contact-'.length)));
     }, ScreenSpaceEventType.LEFT_CLICK);
 
     frameCamera(viewer, current.current.theatre, current.current.cameraView, groundHeight.current, 0);updateCamera();

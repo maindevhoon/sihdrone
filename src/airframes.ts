@@ -1,4 +1,4 @@
-import { seededRandom, type Scenario } from './simulation';
+import { contactCategory, seededRandom, type Scenario } from './simulation';
 
 // Reference airframes built to manufacturers' published dimensions (metres; length along the nose,
 // width across, height including landing gear). Only published figures are shown to trainees;
@@ -80,10 +80,11 @@ const groups: AirframeId[] = ['mavic-3', 'mini-4-pro', 'phantom-4-pro'];
  * The airframe flown in a drone encounter. A pure function of the seed on its own random stream,
  * so scenario generation, saved sessions and replay are unaffected. Groups fly one type.
  */
-export function airframeFor(scenario: Pick<Scenario, 'seed' | 'category'>): Airframe | null {
-  if (scenario.category === 'Bird') return null;
-  const pool = scenario.category === 'Drone group' ? groups : singles;
+export function airframeFor(scenario: Pick<Scenario, 'seed' | 'category'> & Partial<Pick<Scenario, 'version' | 'exercise' | 'count'>>, index = 0): Airframe | null {
+  const category = scenario.version === 3 ? contactCategory(scenario as Scenario, index) : scenario.category;
+  if (category === 'Bird') return null;
+  const pool = category === 'Drone group' ? groups : singles;
   return AIRFRAMES[pool[Math.floor(seededRandom((scenario.seed ^ 0x5bd1e995) >>> 0)()*pool.length)]];
 }
 /** Span of a contact for sensor framing and size estimates. */
-export const contactSpan = (scenario: Pick<Scenario, 'seed' | 'category'>) => airframeFor(scenario)?.span ?? BLACK_KITE.span;
+export const contactSpan = (scenario: Parameters<typeof airframeFor>[0], index = 0) => airframeFor(scenario, index)?.span ?? BLACK_KITE.span;

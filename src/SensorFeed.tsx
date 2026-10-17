@@ -50,7 +50,7 @@ function Gimbal({ scenario, time, track, metresPerUnit, observer=DEFAULT_RADAR_O
     target.set(x*metresPerUnit, y*metresPerUnit, z*metresPerUnit);
     const offset = target.clone().sub(origin), range = offset.length();
     // Frame the airframe at about a third of the image width, widened by the operator's zoom setting.
-    const span = contactSpan(scenario), fieldWidth = span*3*zoom;
+    const span = contactSpan(scenario, id), fieldWidth = span*3*zoom;
     const aspect = size.width/Math.max(1, size.height);
     const vertical = 2*Math.atan(fieldWidth/aspect/2/range);
     camera.fov = Math.min(30, Math.max(.25, vertical*180/Math.PI));

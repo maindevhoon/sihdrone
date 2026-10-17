@@ -53,6 +53,7 @@ node --import tsx scripts/create-contact-models.mjs
 | `src/Radar.tsx` | Interactive synthetic situation display |
 | `src/radarMath.ts` | Radar projection, trails, and readouts |
 | `src/Review.tsx` | Score explanation, timeline, replay, history, JSON export, print |
+| `src/practice.ts` | Explainable adaptive practice suggestions from saved decision evidence |
 | `src/analytics.ts` | Pure training-record statistics, readiness milestones, CSV export |
 | `src/Progress.tsx` | Progress dashboard and trainee profile fields |
 | `src/acoustics.ts` | Rotor loudness/pitch model and Web Audio renderer |
@@ -66,8 +67,8 @@ node --import tsx scripts/create-contact-models.mjs
 
 - Keep scenario generation, positions, and scoring deterministic for a given scenario version, seed, and simulation time. Randomness belongs in scenario/deck creation, never in frame rendering or replay.
 - Use `contactPosition` and `visibleContacts` (and `contactKinematics`, derived from them) as the shared source for both renderers, the sensor feed, radar, and replay. Contact models are real size in metres; Earth view scales positions, not models. Support the full generated contact count in every view; do not assume a fixed maximum from one sample scenario.
-- The scenario format currently supports versions 1 and 2. Preserve the version-1 path when loading or repeating older records. If generation or motion semantics change, version them explicitly and update validation and compatibility tests.
-- The session format is separately versioned at 1, with storage key `aeron-sessions-v1`. All `aeron-*` storage keys predate the rename to Trinetra; keep them unchanged so saved results and preferences survive. Storage validates regenerated scenario fields and recomputed scores. Update these together when changing the schema or scoring, with an explicit migration/compatibility decision.
+- The scenario format supports versions 1, 2 and 3. Version 3 combines birds and drones in mixed encounters using per-track categories; preserve both earlier generators and trajectories. Preserve the version-1 path when loading or repeating older records. If generation or motion semantics change, version them explicitly and update validation and compatibility tests.
+- The session format supports version 1 (legacy encounter scoring) and version 2 (per-track decisions and averaged scores), with the unchanged storage key `aeron-sessions-v1`. New scenario-version-3 exercises save version-2 sessions; repeats of older scenarios retain version-1 scoring. Storage validates every track and reconstructs final answers from its events. Older application versions cannot read version-2 results; do not migrate or erase version-1 history. All `aeron-*` storage keys predate the rename to Trinetra; keep them unchanged so saved results and preferences survive. Storage validates regenerated scenario fields and recomputed scores. Update these together when changing the schema or scoring, with an explicit migration/compatibility decision.
 - Keep the 200 numbered seed entries stable. Shuffle should cover a complete cycle without repeats and avoid repeating the current seed at a cycle boundary. Display the full seed so a variation can be reproduced.
 - All motion, radar trails, sweep animation, and recorded events use the exercise clock. Pause must freeze simulation time. An active exercise pauses when the document becomes hidden.
 - Observation time must fall after contact arrival and before the session ends to earn credit. Classification credit requires a valid observation.

@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight, CircleHelp, Eye, Moon, Pause, Play, Radio, RotateCcw, Shuffle, Sun, X } from 'lucide-react';
-import { categories, createScenario, exercises, formatTime, scoreSession, visibleContacts, type CameraView, type Category, type Difficulty, type ExerciseId, type Session, type SessionEvent } from './simulation';
+import { categories, createScenario, exercises, formatTime, scoreSession, scoreTracks, emptyTrackDecisions, trackLabel, type ScenarioVersion, type TrackDecision, visibleContacts, type CameraView, type Category, type Difficulty, type ExerciseId, type Session, type SessionEvent } from './simulation';
 import { readProfile, readSessions, saveProfile, saveSessions, type Profile } from './storage';
 import Review from './Review';
 import RecognitionGuide from './RecognitionGuide';
@@ -10,6 +10,7 @@ import { LangContext, readLang, saveLang, translate, type Lang } from './i18n';
 import { THEATRES, theatreById, type TheatreId } from './theatres';
 const Progress=lazy(()=>import('./Progress'));
 import {createVariationDeck, variationNumber, VARIATION_SEEDS} from './variations';
+import { planPractice } from './practice';
 import { advancePreview } from './previewClock';
 const SceneView=lazy(()=>import('./SceneView'));
 type Phase='ready'|'running'|'paused'|'review';
@@ -21,8 +22,8 @@ export default function App() {
   const [dusk,setDusk]=useState(false);
   const [variationDeck]=useState(()=>createVariationDeck());
   const [seed,setSeed]=useState(()=>variationDeck.next());
-  const [scenarioVersion,setScenarioVersion]=useState<1|2>(2);
-  function newSeed(){setScenarioVersion(2);return variationDeck.next(seed);}
+  const [scenarioVersion,setScenarioVersion]=useState<ScenarioVersion>(3);
+  function newSeed(){setScenarioVersion(3);return variationDeck.next(seed);}
   const scenario=useMemo(()=>createScenario(exercise,seed,difficulty,dusk,scenarioVersion),[exercise,seed,difficulty,dusk,scenarioVersion]);
   const definition=exercises.find(e=>e.id===exercise)!;
   const previewTime=scenario.arrival+6;
@@ -34,9 +35,18 @@ export default function App() {
   const detectionRef=useRef<number|null>(null);
   const [answer,setAnswer]=useState<Category|''>('');
   const answerRef=useRef<Category|''>('');
+  const [selectedTrack,setSelectedTrack]=useState(0);
+  const [tracks,setTracks]=useState<TrackDecision[]>(()=>emptyTrackDecisions(scenario));
+  const tracksRef=useRef(tracks);
+  const perTrack=scenario.version===3;
+  const currentTrack=tracks[selectedTrack];
+  const currentDetection=perTrack?(currentTrack?.detection ?? null):detected;
+  const currentAnswer=perTrack?(currentTrack?.answer ?? ''):answer;
   const events=useRef<SessionEvent[]>([]);
+  useEffect(()=>{const next=emptyTrackDecisions(scenario);tracksRef.current=next;setTracks(next);setSelectedTrack(0);},[scenario]);
   const [history,setHistory]=useState<Session[]>(readSessions);
   const historyRef=useRef(history);
+  const practicePlan=useMemo(()=>planPractice(history,seed),[history,seed]);
   const [selectedId,setSelectedId]=useState<string|null>(history[0]?.id||null);
   const [notice,setNotice]=useState('');
   const [cameraView,setCameraView]=useState<CameraView>('overview');
@@ -45,7 +55,7 @@ export default function App() {
   const tr=(text:string)=>translate(lang,text);
   function changeLang(next:Lang){setLang(next);saveLang(next);}
   useEffect(()=>{document.documentElement.lang=lang==='hi'?'hi':'en';},[lang]);
-  // The theatre is a view choice, not part of the scenario or the saved session, so it is remembered per browser.
+  // Theatre is a view preference, also recorded on completion for reports.
   const [theatreId,setTheatreId]=useState<TheatreId>(()=>{try{return theatreById(localStorage.getItem('aeron-theatre')??'district').id;}catch{return 'district';}});
   const theatre=theatreById(theatreId);
   const theatreRef=useRef(theatreId);theatreRef.current=theatreId;
@@ -83,8 +93,8 @@ export default function App() {
   const finish=useCallback(()=>{
     if(!['running','paused'].includes(phaseRef.current))return;
     const duration=Math.min(time.current,scenario.duration);
-    const scored=scoreSession(scenario,detectionRef.current,answerRef.current,duration);
-    const session:Session={version:1,id:crypto.randomUUID(),createdAt:new Date().toISOString(),scenario,duration,detection:detectionRef.current,answer:answerRef.current,...scored,events:[...events.current,{time:duration,type:'finish',label:'Exercise completed'}],theatre:theatreRef.current};
+    const scored=scenario.version===3?scoreTracks(scenario,tracksRef.current,duration):scoreSession(scenario,detectionRef.current,answerRef.current,duration);
+    const session:Session={version:scenario.version===3?2:1,...(scenario.version===3?{tracks:tracksRef.current}:{}),id:crypto.randomUUID(),createdAt:new Date().toISOString(),scenario,duration,detection:detectionRef.current,answer:answerRef.current,...scored,events:[...events.current,{time:duration,type:'finish',label:'Exercise completed'}],theatre:theatreRef.current};
     const updated=[session,...historyRef.current].slice(0,20);historyRef.current=updated;setHistory(updated);setSelectedId(session.id);transition('review');
     if(!saveSessions(updated))setNotice('Browser storage is unavailable. Results will remain available during this visit.');
   },[scenario]);
@@ -103,12 +113,32 @@ export default function App() {
     const hide=()=>{if(document.hidden)pause();};document.addEventListener('visibilitychange',hide);
     return()=>{cancelAnimationFrame(frame);document.removeEventListener('visibilitychange',hide);};
   },[phase,scenario.duration,finish,pause]);
-  function reset(start=false){time.current=start?0:previewTime;setElapsed(0);detectionRef.current=null;answerRef.current='';setDetected(null);setAnswer('');events.current=start?[{time:0,type:'start',label:'Exercise started'}]:[];setNotice('');transition(start?'running':'ready');}
-  const mark=useCallback(()=>{if(phaseRef.current!=='running'||detectionRef.current!==null)return;
+  function reset(start=false){const next=emptyTrackDecisions(scenario);tracksRef.current=next;setTracks(next);setSelectedTrack(0);time.current=start?0:previewTime;setElapsed(0);detectionRef.current=null;answerRef.current='';setDetected(null);setAnswer('');events.current=start?[{time:0,type:'start',label:'Exercise started'}]:[];setNotice('');transition(start?'running':'ready');}
+  const mark=useCallback((id=selectedTrack)=>{
+    if(phaseRef.current!=='running'||!Number.isInteger(id)||id<0||id>=scenario.count)return;
     if(!visibleContacts(scenario,time.current).length){setNotice('Keep scanning. The aerial objects have not entered the district yet.');return;}
-    detectionRef.current=time.current;setDetected(time.current);setNotice('');events.current.push({time:time.current,type:'observation',label:'Aerial movement observed'});
-  },[scenario]);
-  const classify=useCallback((value:Category)=>{if(phaseRef.current!=='running'||detectionRef.current===null||answerRef.current===value)return;answerRef.current=value;setAnswer(value);events.current.push({time:time.current,type:'classification',label:`Classified as ${value.toLowerCase()}`});},[]);
+    if(scenario.version===3){
+      const track=tracksRef.current[id];if(!track||track.detection!==null)return;
+      const next=tracksRef.current.map(item=>item.id===id?{...item,detection:time.current}:item);
+      tracksRef.current=next;setTracks(next);
+      events.current.push({time:time.current,type:'observation',trackId:id,label:`${trackLabel(id)} observed`});
+    }else if(detectionRef.current!==null)return;
+    else events.current.push({time:time.current,type:'observation',label:'Aerial movement observed'});
+    if(detectionRef.current===null){detectionRef.current=time.current;setDetected(time.current);}
+    setNotice('');
+  },[scenario,selectedTrack]);
+  const classify=useCallback((value:Category)=>{
+    if(phaseRef.current!=='running')return;
+    if(scenario.version===3){
+      const track=tracksRef.current[selectedTrack];if(!track||track.detection===null||track.answer===value)return;
+      const next=tracksRef.current.map(item=>item.id===selectedTrack?{...item,answer:value}:item);
+      tracksRef.current=next;setTracks(next);
+      events.current.push({time:time.current,type:'classification',trackId:selectedTrack,answer:value,label:`${trackLabel(selectedTrack)} classified as ${value.toLowerCase()}`});
+    }else{
+      if(detectionRef.current===null||answerRef.current===value)return;
+      answerRef.current=value;setAnswer(value);events.current.push({time:time.current,type:'classification',label:`Classified as ${value.toLowerCase()}`});
+    }
+  },[scenario,selectedTrack]);
   useEffect(()=>{const keydown=(event:KeyboardEvent)=>{
     const element=event.target as HTMLElement;
     if(element.closest('input,select,textarea,button,a')||event.altKey||event.ctrlKey||event.metaKey||event.repeat)return;
@@ -118,8 +148,11 @@ export default function App() {
     if(event.key.toLowerCase()==='o')mark();
     if(['1','2','3'].includes(event.key))classify(categories[Number(event.key)-1]);
   };window.addEventListener('keydown',keydown);return()=>window.removeEventListener('keydown',keydown);},[pause,resume,mark,classify]);
-  function repeat(session:Session,newVariation=false){setScenarioVersion(newVariation?2:session.scenario.version);setExercise(session.scenario.exercise);setDifficulty(session.scenario.difficulty);setDusk(session.scenario.dusk);setSeed(newVariation?newSeed():session.scenario.seed);setCameraView('overview');reset();}
-  function nextChallenge(){if(!result)return;if(!result.observationValid){setExercise('skyline');setDifficulty('guided');setDusk(false);setSeed(newSeed());reset();return;}if(result.classificationScore===0||result.detectionScore<25){repeat(result);return;}setExercise(result.scenario.difficulty==='guided'?result.scenario.exercise:'mixed');setDifficulty(result.scenario.difficulty==='guided'?'challenge':'guided');setDusk(result.scenario.dusk);setSeed(newSeed());reset();}
+  function repeat(session:Session,newVariation=false){setScenarioVersion(newVariation?3:session.scenario.version);setExercise(session.scenario.exercise);setDifficulty(session.scenario.difficulty);setDusk(session.scenario.dusk);setSeed(newVariation?newSeed():session.scenario.seed);setCameraView('overview');reset();}
+  function nextChallenge(){
+    setPage('exercise');setScenarioVersion(3);setExercise(practicePlan.exercise);setDifficulty(practicePlan.difficulty);
+    setDusk(practicePlan.dusk);setSeed(practicePlan.seed);setCameraView('overview');reset();
+  }
   function selectSession(id:string){const session=history.find(s=>s.id===id);if(!session)return;setSelectedId(id);setExercise(session.scenario.exercise);setDifficulty(session.scenario.difficulty);setDusk(session.scenario.dusk);setSeed(session.scenario.seed);setScenarioVersion(session.scenario.version);if(session.theatre)changeTheatre(session.theatre);}
   const [radarSlot,setRadarSlot]=useState<HTMLDivElement|null>(null);
   const variation=variationNumber(seed);
@@ -138,7 +171,7 @@ export default function App() {
         <button className="icon-button help-button" aria-label={tr('Operator guide and shortcuts')} title="Operator guide (?)" onClick={()=>setHelp('help')}><CircleHelp size={17}/></button>
       </div>
     </header>
-    {page==='progress'?<main className="console console-progress"><Suspense fallback={<div className="scene-loading"><span className="loader"/></div>}><Progress history={history} profile={profile} onProfile={updateProfile} onOpenSession={id=>{selectSession(id);setPage('exercise');transition('review');}} onStart={()=>{setPage('exercise');if(review)reset();}}/></Suspense></main>:
+    {page==='progress'?<main className="console console-progress"><Suspense fallback={<div className="scene-loading"><span className="loader"/></div>}><Progress practicePlan={practicePlan} onPractice={nextChallenge} history={history} profile={profile} onProfile={updateProfile} onOpenSession={id=>{selectSession(id);setPage('exercise');transition('review');}} onStart={()=>{setPage('exercise');if(review)reset();}}/></Suspense></main>:
     <main className={`console ${review?'console-review':''}`}>
       <aside className="panel mission" aria-label="Mission setup">
         <div className="panel-head"><span>{tr('MISSION SETUP')}</span><span className="tag">{tr(difficulty==='guided'?'GUIDED':'CHALLENGE')}</span></div>
@@ -149,7 +182,7 @@ export default function App() {
           <div className="field"><span className="section-label">{tr('DIFFICULTY')}</span><div className="segmented"><button aria-pressed={difficulty==='guided'} disabled={locked} onClick={()=>setDifficulty('guided')}>{tr('Guided')}</button><button aria-pressed={difficulty==='challenge'} disabled={locked} onClick={()=>setDifficulty('challenge')}>{tr('Challenge')}</button></div></div>
           <div className="field"><span className="section-label">{tr('LIGHTING')}</span><div className="segmented"><button aria-pressed={!dusk} disabled={locked} onClick={()=>setDusk(false)}><Sun size={14}/>{tr('Day')}</button><button aria-pressed={dusk} disabled={locked} onClick={()=>setDusk(true)}><Moon size={14}/>{tr('Dusk')}</button></div></div>
           <div className="field"><div className="field-row"><label htmlFor="variation-select" className="section-label">{tr('VARIATION')}</label><button className="shuffle-button" disabled={locked} onClick={()=>setSeed(newSeed())} aria-label="New scenario variation" title="New scenario variation"><Shuffle size={13}/>{tr('Shuffle')}</button></div>
-            <select id="variation-select" aria-label="Choose scenario variation" value={seed} disabled={locked} onChange={e=>{setSeed(Number(e.target.value));setScenarioVersion(2);}}>{variation===null&&<option value={seed}>Saved seed {seed}</option>}{VARIATION_SEEDS.map((value,index)=><option key={value} value={value}>Variation {(index+1).toString().padStart(3,'0')} · Seed {value}</option>)}</select>
+            <select id="variation-select" aria-label="Choose scenario variation" value={seed} disabled={locked} onChange={e=>{setSeed(Number(e.target.value));setScenarioVersion(3);}}>{variation===null&&<option value={seed}>Saved seed {seed}</option>}{VARIATION_SEEDS.map((value,index)=><option key={value} value={value}>Variation {(index+1).toString().padStart(3,'0')} · Seed {value}</option>)}</select>
             <span className="seed-value">SEED {seed} · {variation?`${variation.toString().padStart(3,'0')} of 200`:'saved variation'} · shuffle avoids repeats</span></div>
           <dl className="mission-facts"><div><dt>{tr('Area')}</dt><dd>{theatre.kind==='synthetic'?tr('Training district'):theatre.name}</dd></div><div><dt>{tr('Window')}</dt><dd>{scenario.duration} s</dd></div><div><dt>{tr('Visibility')}</dt><dd>{tr(difficulty==='guided'?'Light urban haze':'Dense urban haze')}</dd></div><div><dt>{tr('Sensors')}</dt><dd>Radar · EO/IR</dd></div></dl>
           <div className="briefing"><span className="section-label">{tr('PROCEDURE')}</span><ol>
@@ -160,8 +193,8 @@ export default function App() {
         </div>
         <div className="panel-foot"><button className="primary-button" onClick={primary.action}>{primary.icon}{tr(primary.label)}{phase==='ready'?<span>{scenario.duration}s</span>:phase==='running'?<kbd>Space</kbd>:null}</button><p className="demo-note">{tr('Synthetic encounters · results stay in this browser')}</p></div>
       </aside>
-      <section className="stage">{review&&result?<Review key={result.id} session={result} history={history} profile={profile} theatre={theatre} onTheatreChange={changeTheatre} onSelectSession={selectSession} onRepeat={()=>repeat(result)} onNext={nextChallenge}/>:<>
-        <Suspense fallback={<div className="scene scene-loading"><span className="loader"/><p>Preparing the sensor view…</p></div>}><SceneView scenario={scenario} time={time} displayTime={phase==='ready'?previewElapsed:elapsed} selected={detected!==null} phase={phase==='ready'?'preview':phase==='paused'?'paused':'running'} cameraView={cameraView} onCameraChange={setCameraView} onSelect={mark} onResume={resume} onPause={pause} previewPlaying={previewAdvancing} onTogglePreview={togglePreview} onNotice={setNotice} radarTarget={radarSlot} assessment={answer} theatre={theatre} onTheatreChange={changeTheatre}/></Suspense>
+      <section className="stage">{review&&result?<Review practicePlan={practicePlan} key={result.id} session={result} history={history} profile={profile} theatre={theatre} onTheatreChange={changeTheatre} onSelectSession={selectSession} onRepeat={()=>repeat(result)} onNext={nextChallenge}/>:<>
+        <Suspense fallback={<div className="scene scene-loading"><span className="loader"/><p>Preparing the sensor view…</p></div>}><SceneView scenario={scenario} time={time} displayTime={phase==='ready'?previewElapsed:elapsed} selected={currentDetection!==null} selectedTrack={selectedTrack} onTrackChange={setSelectedTrack} decisions={perTrack?tracks:undefined} phase={phase==='ready'?'preview':phase==='paused'?'paused':'running'} cameraView={cameraView} onCameraChange={setCameraView} onSelect={mark} onResume={resume} onPause={pause} previewPlaying={previewAdvancing} onTogglePreview={togglePreview} onNotice={setNotice} radarTarget={radarSlot} assessment={currentAnswer} theatre={theatre} onTheatreChange={changeTheatre}/></Suspense>
         <div className="session-bar">
           <button className="session-action" onClick={primary.action}>{primary.icon}{tr(primary.label)}</button>
           <div className="session-clock mono">{formatTime(elapsed)}<span> / {formatTime(scenario.duration)}</span></div>
@@ -176,11 +209,12 @@ export default function App() {
         <div className="panel-scroll">
           <div ref={setRadarSlot} className="radar-slot"/>
           <section className="ops-section observation">
-            <div className="ops-heading"><span className="section-label">{tr('OBSERVATION')}</span><span className={`obs-status ${detected!==null?'done':phase==='running'?'waiting':''}`}>{detected!==null?`${tr('MARKED')} T+${detected.toFixed(1)} s`:tr(phase==='running'?(elapsed<scenario.arrival?'SCANNING':'AWAITING MARK'):'NOT STARTED')}</span></div>
-            <p className="ops-help">{tr(detected!==null?'Confirm the type on the EO/IR feed, then classify the contact.':phase==='ready'?'Preview playback is unscored. Start the exercise to practise detection.':'Mark as soon as you see aerial movement. Timing counts from arrival.')}</p>
-            <button className={`mark-button ${detected!==null?'marked':''}`} disabled={phase!=='running'||detected!==null} onClick={mark}>{detected===null?<><Eye size={15}/>{tr('Mark observation')}<kbd>O</kbd></>:<><Check size={15}/>{tr('Observation recorded')}</>}</button>
-            <div className="ops-heading classify-heading"><span className="section-label">{tr('CLASSIFICATION')}</span>{answer&&<span className="obs-status done">{tr(answer).toUpperCase()}</span>}</div>
-            <div className="choice-buttons">{categories.map((choice,i)=><button key={choice} disabled={phase!=='running'||detected===null} aria-pressed={answer===choice} onClick={()=>classify(choice)}><kbd>{i+1}</kbd>{tr(choice)}{answer===choice&&<Check size={14}/>}</button>)}</div>
+            {perTrack&&<p className="track-progress" role="status">{tracks.filter(item=>item.detection!==null).length}/{scenario.count} observed · {tracks.filter(item=>item.answer).length}/{scenario.count} classified. Select each radar track to inspect it.</p>}
+            <div className="ops-heading"><span className="section-label">{tr('OBSERVATION')}{perTrack&&` · ${trackLabel(selectedTrack)}`}</span><span className={`obs-status ${currentDetection!==null?'done':phase==='running'?'waiting':''}`}>{currentDetection!==null?`${tr('MARKED')} T+${currentDetection.toFixed(1)} s`:tr(phase==='running'?(elapsed<scenario.arrival?'SCANNING':'AWAITING MARK'):'NOT STARTED')}</span></div>
+            <p className="ops-help">{tr(currentDetection!==null?'Confirm the type on the EO/IR feed, then classify the contact.':phase==='ready'?'Preview playback is unscored. Start the exercise to practise detection.':'Mark as soon as you see aerial movement. Timing counts from arrival.')}</p>
+            <button className={`mark-button ${currentDetection!==null?'marked':''}`} disabled={phase!=='running'||currentDetection!==null} onClick={()=>mark()}>{currentDetection===null?<><Eye size={15}/>{tr('Mark observation')}<kbd>O</kbd></>:<><Check size={15}/>{tr('Observation recorded')}</>}</button>
+            <div className="ops-heading classify-heading"><span className="section-label">{tr('CLASSIFICATION')}</span>{currentAnswer&&<span className="obs-status done">{tr(currentAnswer).toUpperCase()}</span>}</div>
+            <div className="choice-buttons">{categories.map((choice,i)=><button key={choice} disabled={phase!=='running'||currentDetection===null} aria-pressed={currentAnswer===choice} onClick={()=>classify(choice)}><kbd>{i+1}</kbd>{tr(choice)}{currentAnswer===choice&&<Check size={14}/>}</button>)}</div>
           </section>
           <RecognitionGuide difficulty={difficulty}/>
         </div>
