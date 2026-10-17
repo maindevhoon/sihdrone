@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
+import TrackChecklist from './TrackChecklist';
 import { formatTime, visibleContacts, type Category, type Position, type Scenario, type TrackDecision } from './simulation';
 import { contactReadout, contactTrail, DEFAULT_RADAR_OBSERVER, pickRadarContact, projectContact, radarRange, SCOPE_CENTER as C, SCOPE_RADIUS as R } from './radarMath';
 type Props={scenario:Scenario;time:number;selected:boolean;paused:boolean;preview?:boolean;replay?:boolean;onTogglePreview?:()=>void;bearing?:number;metresPerUnit?:number;track:number;assessment?:Category|'';decisions?:TrackDecision[];observer?:Position;mapFollow?:boolean;onTrack:(id:number)=>void;onSelect?:(id:number)=>void};
@@ -64,10 +65,10 @@ export default function Radar({scenario,time,selected,paused,preview=false,repla
       {!inRange.length&&<span className="radar-empty">{contacts.length?'NO RETURNS IN RANGE':'SCANNING'}</span>}
       <span className="radar-heading">HDG {bearing.toString().padStart(3,'0')}°</span><span className="radar-origin" title={mapFollow?'Radar and EO/IR observer follow map panning':'Observer at the training site'}>{mapFollow?'MAP FOLLOW':'SITE FIXED'}</span>
     </div>
-    {contacts.length>0&&<div className="radar-track-picker" role="group" aria-label="Radar tracks">{contacts.map(({id:contact,position})=>{
+    {contacts.length>0&&(decisions&&!replay?<TrackChecklist tracks={contacts.map(({id,position})=>({id,outside:radarRange(position,observer)>range}))} decisions={decisions} selected={activeId} onInspect={inspect}/>:<div className="radar-track-picker" role="group" aria-label="Radar tracks">{contacts.map(({id:contact,position})=>{
       const outside=radarRange(position,observer)>range;
       return <button key={contact} aria-label={`Inspect radar track ${contact+1}`} aria-pressed={contact===activeId} className={outside?'outside-range':''} title={`Slew EO/IR to track ${contact+1}${outside?' (outside scope range)':''}`} onClick={()=>inspect(contact)}>T{(contact+1).toString().padStart(2,'0')}{outside&&<small>OUT</small>}</button>;
-    })}</div>}
+    })}</div>)}
     <dl className="radar-track-data">
       <div><dt>TRK</dt><dd>{readout?trackLabel:'—'}</dd></div>
       <div><dt>BRG / RNG</dt><dd>{readout?`${Math.round(readout.bearing).toString().padStart(3,'0')}°/${Math.round(readout.range)}m`:'NO RTN'}</dd></div>

@@ -64,6 +64,7 @@ The automated checks cover seeded reproduction, contact arrival, scoring edge ca
 - `src/Radar.tsx`: shared-position radar visualization.
 - `src/RecognitionGuide.tsx`: recognition cues.
 - `src/Review.tsx`: score explanation, deterministic replay, history, export and print.
+- `src/DecisionReview.tsx` / `src/reviewEvidence.ts`: outcome filters, per-decision replay checkpoints and mobile decision cards.
 - `src/analytics.ts` / `src/Progress.tsx`: training-record statistics, CSV export and the progress dashboard.
 - `src/acoustics.ts`: rotor loudness/pitch model and the Web Audio renderer.
 - `src/HelpDialog.tsx`: first-visit guide and keyboard reference.
@@ -123,7 +124,9 @@ Verification includes all 200 seeded routes within the default scope, heading pr
 
 Choose **Mixed recognition**, start the exercise, and inspect each numbered radar track. A live radar click records an observation for that track and cues EO/IR. Classify the selected track with the buttons or **1 / 2 / 3**; **T** changes the selection and **O** observes it. Preview and replay inspections are unscored. Radar identities update independently from the operator's answers and never disclose the ground truth during an exercise. Pause freezes motion and blocks scored decisions.
 
-The debrief lists every track's true category, submitted answer, response time and score. Observation timing contributes up to 40 points and a correct identification after observation adds 60. Component scores are averaged across all generated tracks and rounded; a missed track contributes zero. Replay reconstructs answers and corrections at their recorded times without changing the saved result. Progress counts individual track decisions (one encounter for legacy sessions); CSV export includes one row per track, with a Track column.
+The opening screen uses a monochrome introduction with direct Start and Configure actions; it collapses when a live exercise starts. The live console keeps the selected track and classification controls above the radar. The contact register shows each visible track as unobserved, observed or classified, based only on the operator's decisions. A workflow strip shows the current step; **Setup** jumps to mission configuration on smaller screens. The procedure reference can be expanded when needed.
+
+The debrief lists every track's true category, submitted answer, response time and score. Filter decisions by missed, unclassified, incorrect or correct outcomes, then use **Inspect** to open a paused replay at the selected track's final classification, observation, or arrival. Repeated jumps update the existing replay and cue EO/IR without modifying the result. On small screens decisions become individual cards; printed reports include every decision even when the screen is filtered. Sessions ended before arrival cannot inspect an unrecorded future contact. Observation timing contributes up to 40 points and a correct identification after observation adds 60. Component scores are averaged across all generated tracks and rounded; a missed track contributes zero. Replay reconstructs answers and corrections at their recorded times without changing the saved result. Progress counts individual track decisions (one encounter for legacy sessions); CSV export includes one row per track, with a Track column.
 
 ## Adaptive practice
 

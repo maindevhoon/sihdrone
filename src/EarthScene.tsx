@@ -152,7 +152,9 @@ export default function EarthScene(props: Props) {
           // glTF noses point along +Z, which Cesium presents as local east at zero heading.
           orientation: new CallbackProperty(() => {const {k,a} = attitude(index); return Transforms.headingPitchRollQuaternion(contactPoint(index), new HeadingPitchRoll(k.heading - Math.PI/2, -a.pitch, a.roll));}, false),
           model: {
-            uri: modelUri(index), scale: 1, minimumPixelSize: 0, maximumScale: 24,
+            // Allow minimumPixelSize to work at the 2.6 km mountain overview,
+            // while keeping display enlargement bounded when zooming farther out.
+            uri: modelUri(index), scale: 1, minimumPixelSize: 0, maximumScale: 256,
             silhouetteColor: Color.fromCssColorString('#ffd25a'), silhouetteSize: 0,
             nodeTransformations: new PropertyBag({'wing-left': wing(index, 1), 'wing-right': wing(index, -1)}),
           },

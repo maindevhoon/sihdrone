@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronRight, CircleHelp, Eye, Moon, Pause, Play, Radio, RotateCcw, Shuffle, Sun, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, CircleHelp, Crosshair, Eye, Layers, Moon, Pause, Play, Radio, RotateCcw, Shuffle, SlidersHorizontal, Sun, X } from 'lucide-react';
 import { categories, createScenario, exercises, formatTime, scoreSession, scoreTracks, emptyTrackDecisions, trackLabel, type ScenarioVersion, type TrackDecision, visibleContacts, type CameraView, type Category, type Difficulty, type ExerciseId, type Session, type SessionEvent } from './simulation';
 import { readProfile, readSessions, saveProfile, saveSessions, type Profile } from './storage';
 import Review from './Review';
@@ -156,11 +156,14 @@ export default function App() {
   function selectSession(id:string){const session=history.find(s=>s.id===id);if(!session)return;setSelectedId(id);setExercise(session.scenario.exercise);setDifficulty(session.scenario.difficulty);setDusk(session.scenario.dusk);setSeed(session.scenario.seed);setScenarioVersion(session.scenario.version);if(session.theatre)changeTheatre(session.theatre);}
   const [radarSlot,setRadarSlot]=useState<HTMLDivElement|null>(null);
   const variation=variationNumber(seed);
+  const observedCount=tracks.filter(item=>item.detection!==null).length;
+  const classifiedCount=tracks.filter(item=>item.answer).length;
+  const instruction=phase==='ready'?'Explore the scene, then start when you are ready.':phase==='paused'?'Exercise on hold. Resume when you are ready.':currentAnswer?'Assessment saved. Select another track to continue.':currentDetection!==null?'Compare the EO/IR view, then choose a category.':'Select a radar track or mark an observation.';
   const stateLabel=phase==='running'?'LIVE':phase==='paused'?'HOLD':phase==='review'?'DEBRIEF':'STANDBY';
-  const primary=phase==='ready'?{label:'Start exercise',icon:<Play size={15} fill="currentColor"/>,action:()=>reset(true)}:phase==='running'?{label:'Hold exercise',icon:<Pause size={15}/>,action:pause}:phase==='paused'?{label:'Resume exercise',icon:<Play size={15} fill="currentColor"/>,action:resume}:{label:'Run a new variation',icon:<RotateCcw size={15}/>,action:()=>{if(result)repeat(result,true);}};
-  return <LangContext.Provider value={lang}><div className="app-shell">
+  const primary=phase==='ready'?{label:'Start exercise',icon:<Play size={15} fill="currentColor"/>,action:()=>{reset(true);requestAnimationFrame(()=>document.getElementById('exercise-workspace')?.scrollIntoView({block:'start'}));}}:phase==='running'?{label:'Hold exercise',icon:<Pause size={15}/>,action:pause}:phase==='paused'?{label:'Resume exercise',icon:<Play size={15} fill="currentColor"/>,action:resume}:{label:'Run a new variation',icon:<RotateCcw size={15}/>,action:()=>{if(result)repeat(result,true);}};
+  return <LangContext.Provider value={lang}><div className={`app-shell ${page==='exercise'&&!review&&phase==='ready'?'is-standby':''}`}>
     <header className="topbar">
-      <a className="brand" href="/" aria-label="Trinetra home"><span className="brand-mark"><BrandMark/></span><span className="brand-name">TRINETRA</span><span className="brand-hi" lang="hi">त्रिनेत्र</span><span className="brand-sub">{tr('Airspace observation trainer')}</span></a>
+      <a className="brand" href="/" aria-label="Trinetra home"><span className="brand-mark"><BrandMark/></span><span className="brand-name">Trinetra</span><span className="brand-hi" lang="hi">त्रिनेत्र</span><span className="brand-sub">{tr('Airspace observation trainer')}</span></a>
       <nav className="tabs" aria-label="Workspace"><button aria-current={page==='exercise'&&!review?'page':undefined} onClick={()=>{setPage('exercise');if(review)reset();}}>{tr('Exercise')}</button><button aria-current={page==='exercise'&&review?'page':undefined} disabled={!result||active} onClick={()=>{setPage('exercise');if(result)selectSession(result.id);transition('review');}}>{tr('Debrief')}{history.length>0&&<span className="nav-count">{history.length}</span>}</button><button aria-current={page==='progress'?'page':undefined} disabled={active} onClick={()=>setPage('progress')}>{tr('Progress')}</button></nav>
       <div className="topbar-status">
         <div className="status-block"><span>{tr('SCENARIO')}</span><strong>{tr(definition.short)} · {variation?`V${variation.toString().padStart(3,'0')}`:'Saved seed'}</strong></div>
@@ -171,12 +174,16 @@ export default function App() {
         <button className="icon-button help-button" aria-label={tr('Operator guide and shortcuts')} title="Operator guide (?)" onClick={()=>setHelp('help')}><CircleHelp size={17}/></button>
       </div>
     </header>
+    {page==='exercise'&&!review&&phase==='ready'&&<section className="launch-header" aria-label={tr('Training overview')}>
+      <div className="launch-copy"><span className="launch-eyebrow"><span/>{tr('AIRSPACE OBSERVATION, REIMAGINED')}</span><h1 className="launch-title">{tr('Train your eye.')}<br/><span>{tr('Sharpen your judgement.')}</span></h1><p>{tr('Practise recognising drones and birds in a shared 3D airspace.')}</p><div className="launch-actions"><button className="launch-primary" onClick={primary.action}>{tr('Start exercise')}<ChevronRight size={16}/></button><button className="launch-secondary" onClick={()=>document.getElementById('mission-setup')?.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}>{tr('Configure exercise')}<SlidersHorizontal size={14}/></button></div></div>
+      <div className="launch-details"><span className="launch-edition">TRINETRA / त्रिनेत्र</span><div><strong>200</strong><span>{tr('reproducible variations')}</span></div><div><strong>{scenario.duration}s</strong><span>{tr('focused exercises')}</span></div><small>{tr('Synthetic encounters. Results stay in your browser.')}</small></div>
+    </section>}
     {page==='progress'?<main className="console console-progress"><Suspense fallback={<div className="scene-loading"><span className="loader"/></div>}><Progress practicePlan={practicePlan} onPractice={nextChallenge} history={history} profile={profile} onProfile={updateProfile} onOpenSession={id=>{selectSession(id);setPage('exercise');transition('review');}} onStart={()=>{setPage('exercise');if(review)reset();}}/></Suspense></main>:
     <main className={`console ${review?'console-review':''}`}>
-      <aside className="panel mission" aria-label="Mission setup">
-        <div className="panel-head"><span>{tr('MISSION SETUP')}</span><span className="tag">{tr(difficulty==='guided'?'GUIDED':'CHALLENGE')}</span></div>
+      <aside className="panel mission" aria-label="Mission setup" id="mission-setup">
+        <div className="panel-head"><span className="panel-heading-label"><Layers size={13}/>{tr('MISSION SETUP')}</span><span className="tag">{tr(difficulty==='guided'?'GUIDED':'CHALLENGE')}</span></div>
         <div className="panel-scroll">
-          <div className="mission-title"><h1>{tr(definition.title)}</h1><p>{tr(definition.description)}</p></div>
+          <div className="mission-title"><span className="mission-eyebrow">TRINETRA / {tr('TRAINING')}</span><h2>{tr(definition.title)}</h2><p>{tr(definition.description)}</p></div>
           <div className="field"><label className="section-label" htmlFor="theatre-select">{tr('THEATRE')}</label><select id="theatre-select" value={theatre.id} onChange={e=>changeTheatre(e.target.value as TheatreId)}>{THEATRES.map(t=><option key={t.id} value={t.id}>{t.kind==='synthetic'?'3D training district (offline)':`${t.name} — ${t.region}`}</option>)}</select><span className="seed-value">{theatre.kind==='synthetic'?tr('Locally rendered city block; supports thermal view.'):`${theatre.terrainLabel} · ${tr('satellite imagery on 3D terrain')}`}</span></div>
           <div className="field"><label className="section-label" htmlFor="exercise-select">{tr('EXERCISE')}</label><select id="exercise-select" value={exercise} disabled={locked} onChange={e=>{setExercise(e.target.value as ExerciseId);setSeed(newSeed());}}>{exercises.map(e=><option key={e.id} value={e.id}>{tr(e.short)}</option>)}</select></div>
           <div className="field"><span className="section-label">{tr('DIFFICULTY')}</span><div className="segmented"><button aria-pressed={difficulty==='guided'} disabled={locked} onClick={()=>setDifficulty('guided')}>{tr('Guided')}</button><button aria-pressed={difficulty==='challenge'} disabled={locked} onClick={()=>setDifficulty('challenge')}>{tr('Challenge')}</button></div></div>
@@ -185,15 +192,17 @@ export default function App() {
             <select id="variation-select" aria-label="Choose scenario variation" value={seed} disabled={locked} onChange={e=>{setSeed(Number(e.target.value));setScenarioVersion(3);}}>{variation===null&&<option value={seed}>Saved seed {seed}</option>}{VARIATION_SEEDS.map((value,index)=><option key={value} value={value}>Variation {(index+1).toString().padStart(3,'0')} · Seed {value}</option>)}</select>
             <span className="seed-value">SEED {seed} · {variation?`${variation.toString().padStart(3,'0')} of 200`:'saved variation'} · shuffle avoids repeats</span></div>
           <dl className="mission-facts"><div><dt>{tr('Area')}</dt><dd>{theatre.kind==='synthetic'?tr('Training district'):theatre.name}</dd></div><div><dt>{tr('Window')}</dt><dd>{scenario.duration} s</dd></div><div><dt>{tr('Visibility')}</dt><dd>{tr(difficulty==='guided'?'Light urban haze':'Dense urban haze')}</dd></div><div><dt>{tr('Sensors')}</dt><dd>Radar · EO/IR</dd></div></dl>
-          <div className="briefing"><span className="section-label">{tr('PROCEDURE')}</span><ol>
+          <details className="briefing"><summary><span className="section-label">{tr('PROCEDURE')}</span><ChevronDown size={14}/></summary><ol>
             <li><b>{tr('Detect')}</b><span>{tr('Scan the skyline and the radar for new returns.')}</span></li>
             <li><b>{tr('Observe')}</b><span>{tr('Click the aircraft or its radar track, or press')} <kbd>O</kbd>.</span></li>
             <li><b>{tr('Identify')}</b><span>{tr('Confirm on the EO/IR feed, then classify with')} <kbd>1</kbd>–<kbd>3</kbd>.</span></li>
-          </ol></div>
+          </ol></details>
         </div>
         <div className="panel-foot"><button className="primary-button" onClick={primary.action}>{primary.icon}{tr(primary.label)}{phase==='ready'?<span>{scenario.duration}s</span>:phase==='running'?<kbd>Space</kbd>:null}</button><p className="demo-note">{tr('Synthetic encounters · results stay in this browser')}</p></div>
       </aside>
-      <section className="stage">{review&&result?<Review practicePlan={practicePlan} key={result.id} session={result} history={history} profile={profile} theatre={theatre} onTheatreChange={changeTheatre} onSelectSession={selectSession} onRepeat={()=>repeat(result)} onNext={nextChallenge}/>:<>
+      <section className="stage" id="exercise-workspace">{review&&result?<Review practicePlan={practicePlan} key={result.id} session={result} history={history} profile={profile} theatre={theatre} onTheatreChange={changeTheatre} onSelectSession={selectSession} onRepeat={()=>repeat(result)} onNext={nextChallenge}/>:<>
+        <header className="workspace-heading"><div><span className="section-label">{tr('LIVE WORKSPACE')}</span><h2>{tr('Your training workspace')}</h2></div><div className="workspace-status"><span className={`workspace-mode ${phase==='running'?'is-live':''}`}><span className="state-dot"/>{tr(phase==='ready'?'Unscored preview':phase==='paused'?'Exercise on hold':'Exercise in progress')}</span><button className="setup-shortcut" onClick={()=>document.getElementById('mission-setup')?.scrollIntoView({block:'start'})}><SlidersHorizontal size={12}/>{tr('Setup')}</button></div></header>
+        <div className="workflow-strip" role="group" aria-label={tr('Exercise procedure')}><span className={currentDetection===null?'active':'complete'}><b>{currentDetection!==null?<Check size={11}/>:'01'}</b>{tr('Observe')}</span><i/><span className={currentAnswer?'complete':currentDetection!==null?'active':''}><b>{currentAnswer?<Check size={11}/>:'02'}</b>{tr('Identify')}</span><i/><span><b>03</b>{tr('Debrief')}</span><p>{tr(instruction)}</p></div>
         <Suspense fallback={<div className="scene scene-loading"><span className="loader"/><p>Preparing the sensor view…</p></div>}><SceneView scenario={scenario} time={time} displayTime={phase==='ready'?previewElapsed:elapsed} selected={currentDetection!==null} selectedTrack={selectedTrack} onTrackChange={setSelectedTrack} decisions={perTrack?tracks:undefined} phase={phase==='ready'?'preview':phase==='paused'?'paused':'running'} cameraView={cameraView} onCameraChange={setCameraView} onSelect={mark} onResume={resume} onPause={pause} previewPlaying={previewAdvancing} onTogglePreview={togglePreview} onNotice={setNotice} radarTarget={radarSlot} assessment={currentAnswer} theatre={theatre} onTheatreChange={changeTheatre}/></Suspense>
         <div className="session-bar">
           <button className="session-action" onClick={primary.action}>{primary.icon}{tr(primary.label)}</button>
@@ -207,15 +216,16 @@ export default function App() {
       {!review&&<aside className="panel ops" aria-label="Situation and classification">
         <div className="panel-head"><span>{tr('SITUATION')}</span><span className="panel-head-note"><Radio size={12}/>{tr('Radar · simulated')}</span></div>
         <div className="panel-scroll">
-          <div ref={setRadarSlot} className="radar-slot"/>
           <section className="ops-section observation">
-            {perTrack&&<p className="track-progress" role="status">{tracks.filter(item=>item.detection!==null).length}/{scenario.count} observed · {tracks.filter(item=>item.answer).length}/{scenario.count} classified. Select each radar track to inspect it.</p>}
+            <div className="selected-track-heading"><span className="selected-track-icon"><Crosshair size={20}/></span><div><span className="section-label">{tr('SELECTED TRACK')}</span><h3>{trackLabel(selectedTrack)}<small>{tr('Operator assessment')}</small></h3></div><span className={`track-stage ${currentAnswer?'classified':currentDetection!==null?'observed':''}`}>{tr(currentAnswer?'Classified':currentDetection!==null?'Observed':'Unobserved')}</span></div>
+            {perTrack&&<div className="track-progress" role="status"><span>{observedCount}/{scenario.count} {tr('observed')}</span><span>{classifiedCount}/{scenario.count} {tr('classified')}</span><div className="track-completion" aria-hidden>{tracks.map(item=><i key={item.id} className={item.answer?'complete':item.detection!==null?'observed':''}/>)}</div></div>}
             <div className="ops-heading"><span className="section-label">{tr('OBSERVATION')}{perTrack&&` · ${trackLabel(selectedTrack)}`}</span><span className={`obs-status ${currentDetection!==null?'done':phase==='running'?'waiting':''}`}>{currentDetection!==null?`${tr('MARKED')} T+${currentDetection.toFixed(1)} s`:tr(phase==='running'?(elapsed<scenario.arrival?'SCANNING':'AWAITING MARK'):'NOT STARTED')}</span></div>
             <p className="ops-help">{tr(currentDetection!==null?'Confirm the type on the EO/IR feed, then classify the contact.':phase==='ready'?'Preview playback is unscored. Start the exercise to practise detection.':'Mark as soon as you see aerial movement. Timing counts from arrival.')}</p>
             <button className={`mark-button ${currentDetection!==null?'marked':''}`} disabled={phase!=='running'||currentDetection!==null} onClick={()=>mark()}>{currentDetection===null?<><Eye size={15}/>{tr('Mark observation')}<kbd>O</kbd></>:<><Check size={15}/>{tr('Observation recorded')}</>}</button>
             <div className="ops-heading classify-heading"><span className="section-label">{tr('CLASSIFICATION')}</span>{currentAnswer&&<span className="obs-status done">{tr(currentAnswer).toUpperCase()}</span>}</div>
             <div className="choice-buttons">{categories.map((choice,i)=><button key={choice} disabled={phase!=='running'||currentDetection===null} aria-pressed={currentAnswer===choice} onClick={()=>classify(choice)}><kbd>{i+1}</kbd>{tr(choice)}{currentAnswer===choice&&<Check size={14}/>}</button>)}</div>
           </section>
+          <div ref={setRadarSlot} className="radar-slot"/>
           <RecognitionGuide difficulty={difficulty}/>
         </div>
       </aside>}

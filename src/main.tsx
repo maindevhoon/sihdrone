@@ -2,6 +2,7 @@ import React, { Component, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
+import './console.css';
 
 // Last-resort boundary: the 3D views have their own; this keeps a broken render from blanking the page.
 class AppBoundary extends Component<{children:ReactNode},{failed:boolean}> {
