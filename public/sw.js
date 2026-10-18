@@ -1,5 +1,5 @@
-// Trinetra service worker: offline shell and cached build assets. Bump VERSION when this logic changes.
-const VERSION = 'trinetra-v4';
+// Trinetra service worker: offline shell and cached build assets. Bump VERSION when caching logic or model assets change.
+const VERSION = 'trinetra-v5';
 const SHELL = ['/', '/favicon.svg', '/manifest.webmanifest', '/models/bird.glb',
   ...['mavic-3', 'phantom-4-pro', 'matrice-350-rtk', 'mini-4-pro'].map(id => `/models/drone-${id}.glb`),
   '/models/credits.json',
@@ -20,7 +20,7 @@ self.addEventListener('fetch', event => {
     }).catch(() => caches.match('/')));
     return;
   }
-  // Hashed build assets, contact models and Cesium runtime files never change under the same URL.
+  // Cache runtime assets within this version. Bump VERSION when model assets change.
   if (/^\/(assets|models|cesium)\//.test(url.pathname)) {
     event.respondWith(caches.match(request).then(hit => hit || fetch(request).then(response => {
       if (response.ok) { const copy = response.clone(); void caches.open(VERSION).then(cache => cache.put(request, copy)); }

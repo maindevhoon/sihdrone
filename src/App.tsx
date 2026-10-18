@@ -15,6 +15,7 @@ import { planPractice } from './practice';
 import { advancePreview } from './previewClock';
 const SceneView=lazy(()=>import('./SceneView'));
 const PilotView=lazy(()=>import('./PilotView'));
+const ModelLibrary=lazy(()=>import('./ModelLibrary'));
 import { useFlightPreparation } from './useFlightPreparation';
 import { useFlightTerrain } from './useFlightTerrain';
 import { flatTerrain } from './flightTerrain';
@@ -68,7 +69,7 @@ export default function App() {
   const [selectedId,setSelectedId]=useState<string|null>(history[0]?.id||null);
   const [notice,setNotice]=useState('');
   const [cameraView,setCameraView]=useState<CameraView>('overview');
-  const [page,setPage]=useState<'exercise'|'progress'|'pilot'>('exercise');
+  const [page,setPage]=useState<'exercise'|'progress'|'pilot'|'library'>('exercise');
   const [lang,setLang]=useState<Lang>(readLang);
   const tr=(text:string)=>translate(lang,text);
   function changeLang(next:Lang){setLang(next);saveLang(next);}
@@ -153,7 +154,7 @@ export default function App() {
     }
   },[scenario,selectedTrack]);
   useEffect(()=>{const keydown=(event:KeyboardEvent)=>{
-    if(page==='pilot')return;
+    if(page==='pilot'||page==='library')return;
     const element=event.target as HTMLElement;
     if(element.closest('input,select,textarea,button,a')||event.altKey||event.ctrlKey||event.metaKey||event.repeat)return;
     if(document.querySelector('[aria-modal="true"]'))return;
@@ -178,12 +179,12 @@ export default function App() {
   return <LangContext.Provider value={lang}><div className={`app-shell ${page==='exercise'&&!review&&phase==='ready'?'is-standby':''}`}>
     <header className="topbar">
       <a className="brand" href="/" aria-label="Trinetra home"><span className="brand-mark"><BrandMark/></span><span className="brand-name">Trinetra</span><span className="brand-hi" lang="hi">त्रिनेत्र</span><span className="brand-sub">{tr('Airspace observation trainer')}</span></a>
-      <nav className="tabs" aria-label="Workspace"><button aria-current={page==='exercise'&&!review?'page':undefined} onClick={()=>{setPage('exercise');if(review)reset();}}>{tr('Exercise')}</button><button aria-current={page==='exercise'&&review?'page':undefined} disabled={!result||active} onClick={()=>{setPage('exercise');if(result)selectSession(result.id);transition('review');}}>{tr('Debrief')}{history.length>0&&<span className="nav-count">{history.length}</span>}</button><button aria-current={page==='pilot'?'page':undefined} disabled={active} onClick={()=>{setPage('pilot');setPreviewPlaying(false);}}>Pilot lab</button><button aria-current={page==='progress'?'page':undefined} disabled={active} onClick={()=>setPage('progress')}>{tr('Progress')}</button></nav>
+      <nav className="tabs" aria-label="Workspace"><button aria-current={page==='exercise'&&!review?'page':undefined} onClick={()=>{setPage('exercise');if(review)reset();}}>{tr('Exercise')}</button><button aria-current={page==='exercise'&&review?'page':undefined} disabled={!result||active} onClick={()=>{setPage('exercise');if(result)selectSession(result.id);transition('review');}}>{tr('Debrief')}{history.length>0&&<span className="nav-count">{history.length}</span>}</button><button aria-current={page==='pilot'?'page':undefined} disabled={active} onClick={()=>{setPage('pilot');setPreviewPlaying(false);}}>Pilot lab</button><button className="library-nav" aria-current={page==='library'?'page':undefined} disabled={phase==='running'} onClick={()=>{setPage('library');setPreviewPlaying(false);}}>Library</button><button aria-current={page==='progress'?'page':undefined} disabled={active} onClick={()=>setPage('progress')}>{tr('Progress')}</button></nav>
       <div className="topbar-status">
-        <div className="status-block"><span>{tr('SCENARIO')}</span><strong>{page==='pilot'?'Manual flight':tr(definition.short)} · {variation?`V${variation.toString().padStart(3,'0')}`:'Saved seed'}</strong></div>
-        <div className="status-block"><span>{tr(page==='pilot'?'FLIGHT MODE':'EXERCISE CLOCK')}</span><strong className="mono">{page==='pilot'?'UNSCORED':<>{formatTime(review&&result?result.duration:elapsed)}<small> / {formatTime(scenario.duration)}</small></>}</strong></div>
+        <div className="status-block"><span>{tr(page==='library'?'REFERENCE':'SCENARIO')}</span><strong>{page==='library'?'Birds + aircraft':page==='pilot'?'Manual flight':tr(definition.short)}{page!=='library'&&<> · {variation?`V${variation.toString().padStart(3,'0')}`:'Saved seed'}</>}</strong></div>
+        <div className="status-block"><span>{tr(page==='library'?'MODE':page==='pilot'?'FLIGHT MODE':'EXERCISE CLOCK')}</span><strong className="mono">{page==='pilot'||page==='library'?'UNSCORED':<>{formatTime(review&&result?result.duration:elapsed)}<small> / {formatTime(scenario.duration)}</small></>}</strong></div>
         {profile.name&&<div className="status-block"><span>{tr('TRAINEE')}</span><strong>{profile.name}</strong></div>}
-        <span className={`state-pill state-${phase}`}><span className="state-dot"/>{page==='pilot'?'PILOT LAB':tr(stateLabel)}</span>
+        <span className={`state-pill state-${phase}`}><span className="state-dot"/>{page==='library'?'REFERENCE':page==='pilot'?'PILOT LAB':tr(stateLabel)}</span>
         <button className="lang-toggle" aria-label={`${tr('Language')}: ${lang==='hi'?'हिन्दी':'English'}`} title="English / हिन्दी" onClick={()=>changeLang(lang==='hi'?'en':'hi')}><span aria-hidden className={lang==='en'?'on':''}>EN</span><span aria-hidden className={lang==='hi'?'on':''}>हिं</span></button>
         <button className="icon-button help-button" aria-label={tr('Operator guide and shortcuts')} title="Operator guide (?)" onClick={()=>setHelp('help')}><CircleHelp size={17}/></button>
       </div>
@@ -192,7 +193,7 @@ export default function App() {
       <div className="launch-copy"><span className="launch-eyebrow"><span/>{tr('AIRSPACE OBSERVATION, REIMAGINED')}</span><h1 className="launch-title">{tr('Train your eye.')}<br/><span>{tr('Sharpen your judgement.')}</span></h1><p>{tr('Practise recognising drones and birds in a shared 3D airspace.')}</p><div className="launch-actions"><button className="launch-primary" disabled={!flightReady} onClick={primary.action}>{tr('Start exercise')}<ChevronRight size={16}/></button><button className="launch-secondary" onClick={()=>document.getElementById('mission-setup')?.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}>{tr('Configure exercise')}<SlidersHorizontal size={14}/></button></div></div>
       <div className="launch-details"><span className="launch-edition">TRINETRA / त्रिनेत्र</span><div><strong>200</strong><span>{tr('reproducible variations')}</span></div><div><strong>{scenario.duration}s</strong><span>{tr('focused exercises')}</span></div><small>{tr('Synthetic encounters. Results stay in your browser.')}</small></div>
     </section>}
-    {page==='pilot'?<Suspense fallback={<div className="scene-loading">Preparing flight lab…</div>}><PilotView lighting={lighting} fog={fog} suspended={!!help} onBack={()=>setPage('exercise')}/></Suspense>:page==='progress'?<main className="console console-progress"><Suspense fallback={<div className="scene-loading"><span className="loader"/></div>}><Progress practicePlan={practicePlan} onPractice={nextChallenge} history={history} profile={profile} onProfile={updateProfile} onOpenSession={id=>{selectSession(id);setPage('exercise');transition('review');}} onStart={()=>{setPage('exercise');if(review)reset();}}/></Suspense></main>:
+    {page==='library'?<Suspense fallback={<div className="scene-loading">Preparing recognition library…</div>}><ModelLibrary onBack={()=>setPage('exercise')}/></Suspense>:page==='pilot'?<Suspense fallback={<div className="scene-loading">Preparing flight lab…</div>}><PilotView lighting={lighting} fog={fog} suspended={!!help} onBack={()=>setPage('exercise')}/></Suspense>:page==='progress'?<main className="console console-progress"><Suspense fallback={<div className="scene-loading"><span className="loader"/></div>}><Progress practicePlan={practicePlan} onPractice={nextChallenge} history={history} profile={profile} onProfile={updateProfile} onOpenSession={id=>{selectSession(id);setPage('exercise');transition('review');}} onStart={()=>{setPage('exercise');if(review)reset();}}/></Suspense></main>:
     <main className={`console ${review?'console-review':''}`}>
       <aside className="panel mission" aria-label="Mission setup" id="mission-setup">
         <div className="panel-head"><span className="panel-heading-label"><Layers size={13}/>{tr('MISSION SETUP')}</span><span className="tag">{tr(difficulty==='guided'?'GUIDED':'CHALLENGE')}</span></div>
@@ -242,7 +243,7 @@ export default function App() {
             <div className="choice-buttons">{categories.map((choice,i)=><button key={choice} disabled={phase!=='running'||currentDetection===null} aria-pressed={currentAnswer===choice} onClick={()=>classify(choice)}><kbd>{i+1}</kbd>{tr(choice)}{currentAnswer===choice&&<Check size={14}/>}</button>)}</div>
           </section>
           <div ref={setRadarSlot} className="radar-slot"/>
-          <RecognitionGuide difficulty={difficulty}/>
+          <RecognitionGuide difficulty={difficulty} libraryDisabled={phase==='running'} onOpenLibrary={()=>{setPage('library');setPreviewPlaying(false);}}/>
         </div>
       </aside>}
     </main>}

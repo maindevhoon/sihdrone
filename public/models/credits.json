@@ -7,126 +7,126 @@
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://www.horizonhobby.com/on/demandware.static/Sites-horizon-us-Site/Sites-horizon-master/default/Manuals/YUNTYH-Manual-EN.pdf",
-      "sha256": "9edcb9b2e3e522fa3368466614590c32f404c263093e4efa0f1c3710ffcf087a"
+      "sha256": "0c94c48cfbb65a0e19c8589f85b0a37b007a9ac4989fc9a86f5c5f6ee3d54be3"
     },
     {
       "file": "v3-rc-cessna.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://github.com/PX4/PX4-gazebo-models/blob/main/models/rc_cessna/model.sdf",
-      "sha256": "fa5dfaa29506e34d5b642d8e8ebf98c679b83ee2569ff85404b9270c2211c269"
+      "sha256": "7db586e5ce38da1c6aab58805e56c9ce11e74ede11fab8264cb2086cbac8bfee"
     },
     {
       "file": "v3-mavic-3.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://www.dji.com/support/product/mavic-3",
-      "sha256": "002f7ade728718f1b1d70f51e8394823bb28b4036ce2464c41e9942eade0281c"
+      "sha256": "89c089fcefcc29f44af7b594aa0a921d93b4f217f94accf55e9b584b76f54ea4"
     },
     {
       "file": "v3-phantom-4-pro.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://www.dji.com/support/product/phantom-4-pro-v2",
-      "sha256": "7cbf2205f2715e0a630b390016acd34b3f1cd223ea280543b77da8d97a26ae6b"
+      "sha256": "63fa5fae8a3ad8bcc3b95a37cc085bc410f77e007ebfa7a4d32f3434329a5636"
     },
     {
       "file": "v3-matrice-350-rtk.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://enterprise.dji.com/matrice-350-rtk/specs",
-      "sha256": "789ec4d069342a57ff6fe40143b04e8fd1c1dff24d19205551c314f02b0f27cd"
+      "sha256": "d079375b8626fb715747d067b4b3a349df0f8b7994a6623a6b99b8533322507a"
     },
     {
       "file": "v3-mini-4-pro.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://www.dji.com/mini-4-pro/specs",
-      "sha256": "9cf7b5d5efbfbb9bd19337bac0df31e2fdc2259420ab03501bafbdc562a8c673"
+      "sha256": "7e27eed094928af10b0ebc698ee6ed8d92f3c8d78cf993fb1edf12eca065d56f"
     },
     {
       "file": "v3-black-kite.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://animaldiversity.org/accounts/Milvus_migrans/",
-      "sha256": "edf3f00956977db634de9127c53577bce02ddc3a2fd04fe59fab0ca9587e8d38"
+      "sha256": "a1133ae33565c645f40e2ea2c7730260f25278de2b78a38a75f0235ff13059e2"
     },
     {
       "file": "v3-house-crow.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://invasivespeciesni.co.uk/wp-content/uploads/2025/03/NIEA-ID-Guide-Corvus-splendens-Indian-House-Crow.pdf",
-      "sha256": "c2a1ff45aad3b7052098c853d95348ed9b90446bba2075e906589e64b2178404"
+      "sha256": "b0fb1440f33e33e6fbb47563cf5e65e51932bc891ddca90e4405395be295b249"
     },
     {
       "file": "v3-rock-pigeon.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://www.allaboutbirds.org/guide/rock_pigeon/id",
-      "sha256": "17e00fdc6613ee4f6440379a7ddde254d2538e95ff3f3981aa926415942ee1bf"
+      "sha256": "7dc4c2a6b0a142bf9196f90e3c6e38d4c0f9ad4c8ea902a665bad5b6489f4555"
     },
     {
       "file": "v3-typhoon-h480-low.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://www.horizonhobby.com/on/demandware.static/Sites-horizon-us-Site/Sites-horizon-master/default/Manuals/YUNTYH-Manual-EN.pdf",
-      "sha256": "04bc9cd5e3432d117721e99bdafecc77a1414feae346dd91ea41bb0db3c287dc"
+      "sha256": "a11a3ad09444d253b21eea068854f18bb573c048ad271b0c09e8303682d2c4bc"
     },
     {
       "file": "v3-rc-cessna-low.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://github.com/PX4/PX4-gazebo-models/blob/main/models/rc_cessna/model.sdf",
-      "sha256": "fa5dfaa29506e34d5b642d8e8ebf98c679b83ee2569ff85404b9270c2211c269"
+      "sha256": "f76646994f68d01edcf57e43bf4df02b2d44403c33df2eb460aa72846b141c4d"
     },
     {
       "file": "v3-mavic-3-low.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://www.dji.com/support/product/mavic-3",
-      "sha256": "e3eb0139066d2fb25b23cce24c122609246184878e06bbf8154723b02222150f"
+      "sha256": "11d63843d6ca4c8f8a48a0862f13779ea39d3eb2f6e0ea560049245a3db32071"
     },
     {
       "file": "v3-phantom-4-pro-low.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://www.dji.com/support/product/phantom-4-pro-v2",
-      "sha256": "1e1c12a69a2cab306e4fc42da72af2e3e792bf4dde425f0578b31d1e48e98081"
+      "sha256": "928d1a0d780869cc063af380a24c8dba120e9871930a608e2a3bb44982ef91f0"
     },
     {
       "file": "v3-matrice-350-rtk-low.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://enterprise.dji.com/matrice-350-rtk/specs",
-      "sha256": "da096f8d18d0c0a911365c8c3efe60aa5f783a63114e7ee1ec92d9f903db522b"
+      "sha256": "a1c09c574607377916f3df93cbbefdc808bbb83fc667655372e5d2723d555b03"
     },
     {
       "file": "v3-mini-4-pro-low.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://www.dji.com/mini-4-pro/specs",
-      "sha256": "fa09dc1338a8b9b5d59080e0e974ad47aa2f61854dc61198daacc70014fc2902"
+      "sha256": "906bddbe05a4f153d844b210e17ef90f53ab843c36303d258f24f109651c4a40"
     },
     {
       "file": "v3-black-kite-low.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://animaldiversity.org/accounts/Milvus_migrans/",
-      "sha256": "12b9b39ab669aab03e9d0792f54b42d1f8c92d66a1faf733ddcec093e6a71a8a"
+      "sha256": "376d5b96c0135ace9d08487c5646afa0ededf38f74961972f9ab845544aff120"
     },
     {
       "file": "v3-house-crow-low.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://invasivespeciesni.co.uk/wp-content/uploads/2025/03/NIEA-ID-Guide-Corvus-splendens-Indian-House-Crow.pdf",
-      "sha256": "b813454b15fa893d16d13abef5b2b62001e887dd6bddd8732b850f3956900e92"
+      "sha256": "fa74393606fc33fb407b123546f45c0f3e33ded61e30ba27a16be10272885ddc"
     },
     {
       "file": "v3-rock-pigeon-low.glb",
       "author": "Trinetra project",
       "geometry": "Original procedural geometry; no third-party model mesh",
       "reference": "https://www.allaboutbirds.org/guide/rock_pigeon/id",
-      "sha256": "f799b0184dea04673b75f463110d5d4925cc44f3795d1b2081378e43651de546"
+      "sha256": "4ce5d1e6f8220779a9b85f2d9b5e1a0d7f97260a580bfc1dcf50ad5df46124e6"
     }
   ]
 }

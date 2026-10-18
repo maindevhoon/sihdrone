@@ -1,3 +1,5 @@
+import { createDetailedBird } from './birdGeometry';
+import { addAirframeDetail } from './airframeDetail';
 import {
   CanvasTexture, CircleGeometry, Color, FrontSide, CylinderGeometry, DoubleSide, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial,
   MeshStandardMaterial, Points, PointsMaterial, BufferGeometry, Shape, ShapeGeometry, SphereGeometry, SRGBColorSpace,
@@ -162,22 +164,9 @@ export function createBirdModel({ palette = 'visible' }: { palette?: ContactPale
 export function createFlightModel(id:FlightModelId,palette:ContactPalette='visible',lowLight=false,lights=true,detail:'high'|'low'='high'):Group {
   if(id in BIRDS){const bird=createArticulatedBird(id as keyof typeof BIRDS,palette,detail==='high');mergeStaticMeshes(bird);return bird;}
   const a=AIRFRAMES[id as keyof typeof AIRFRAMES];
-  if(a.fixedWing)return createPlaneModel(palette);
+  if(a.fixedWing){const plane=createPlaneModel(palette);addAirframeDetail(plane,a,palette,detail==='high');mergeStaticMeshes(plane);return plane;}
   const root=createDroneModel({airframe:a,palette,dusk:lowLight,lights});
-  if(detail==='low'){mergeStaticMeshes(root);return root;}
-  const shell=material(palette,{color:a.livery==='white'?0xe1e6ea:0x363d45,metalness:.3,roughness:.32},.6);
-  const dark=material(palette,{color:0x10151b,roughness:.55},.75);
-  // Recessed vents, camera optics, battery seams and screw heads inside the size envelope.
-  for(const side of [-1,1])for(let i=0;i<5;i++){
-    const vent=add(root,new BoxGeometry(.0015,a.body.height*.08,a.body.length*.026),dark,[side*a.body.width*.455,0,a.body.z+(i-2)*a.body.length*.075]);
-    vent.rotation.z=side*.15;
-  }
-  add(root,new RoundedBoxGeometry(a.body.width*.63,.012,a.body.length*.47,2,.003),shell,[0,a.body.height*.42,a.body.z-a.body.length*.13],'battery-cover');
-  for(const [x,y,z] of a.motors){
-    add(root,new CylinderGeometry(.002,.002,.002,8),dark,[x,y+a.motorRadius*1.36,z]);
-    const led=add(root,new SphereGeometry(a.motorRadius*.13,6,4),material(palette,{color:x>0?0xef4038:0x4ff094},.5),[x,y-a.motorRadius*.5,z],'navigation-led');
-    if(led.material instanceof MeshStandardMaterial){led.material.emissive.setHex(x>0?0xef4038:0x4ff094);led.material.emissiveIntensity=lowLight?3:1;}
-  }
+  addAirframeDetail(root,a,palette,detail==='high');
   if(a.motors.length===6)rigs.get(root)?.props.forEach((p,i)=>{p.userData.spin=i%2?1:-1;});
   mergeStaticMeshes(root);return root;
 }
@@ -198,44 +187,10 @@ function mergeStaticMeshes(root:Object3D){
   }
 }
 function createArticulatedBird(id:keyof typeof BIRDS,palette:ContactPalette,detailed=true){
-  const b=BIRDS[id],root=new Group(),L=b.length,half=b.span/2;
-  root.name=`bird-${id}`;
-  const bodyMat=material(palette,{color:b.colors[0],roughness:.92},.9),wingMat=material(palette,{color:b.colors[1],roughness:.95},.72),headMat=material(palette,{color:b.colors[2],roughness:.75},.94);
-  const dark=material(palette,{color:0x131417,roughness:.65},.6);
-  const body=add(root,new SphereGeometry(1,24,14),bodyMat,[0,0,0],'body');body.scale.set(L*.12,L*.11,L*.26);
-  const neck=add(root,new SphereGeometry(1,16,10),headMat,[0,L*.035,L*.2],'neck');neck.scale.set(L*.075,L*.085,L*.13);
-  const head=add(root,new SphereGeometry(1,16,12),id==='house-crow'?dark:headMat,[0,L*.06,L*.31],'head');head.scale.set(L*.072,L*.075,L*.09);
-  const beak=add(root,new CylinderGeometry(0,L*.021,L*.13,10),dark,[0,L*.04,L*.43],'beak');beak.rotation.x=Math.PI/2+.12;
-  for(const side of [-1,1])add(root,new SphereGeometry(L*.012,8,6),dark,[side*L*.068,L*.075,L*.34],'eye');
-  const rig:Rig={props:[],wings:[],elbows:[],wrists:[]};
-  const widths=[(half-.025)*.43,(half-.025)*.35,(half-.025)*.22];
-  for(const side of [1,-1]){
-    const suffix=side===1?'left':'right',shoulder=new Group();shoulder.name=`wing-${suffix}`;shoulder.position.set(side*.025,L*.04,L*.025);root.add(shoulder);rig.wings.push(shoulder);
-    let parent=shoulder;
-    widths.forEach((width,j)=>{
-      if(j){const joint=new Group();joint.name=`${j===1?'elbow':'wrist'}-${suffix}`;joint.position.x=side*widths[j-1];parent.add(joint);parent=joint;(j===1?rig.elbows!:rig.wrists!).push(joint);}
-      const chord=L*(j===0?.42:j===1?.34:.26),taper=j===2?.45:.85;
-      const shape=new Shape([[0,chord*.4],[side*width,chord*.2],[side*width,-chord*taper],[0,-chord*.7]].map(([x,y])=>new Vector2(x,y)));
-      const geometry=new ExtrudeGeometry(shape,{depth:L*.008,bevelEnabled:false}).rotateX(Math.PI/2);
-      add(parent,geometry,wingMat,[0,0,0],`feather-cover-${suffix}-${j}`);
-      // Overlapping primary/secondary feathers give thickness, separation and a pointed tip.
-      for(let f=0;detailed&&f<6;f++){
-        const feather=add(parent,new SphereGeometry(1,8,6),f%2?wingMat:bodyMat,[side*width*(f+.5)/6,-L*.008,-chord*.56],`feather-${suffix}-${j}-${f}`);
-        feather.scale.set(width/13,L*.007,chord*(j===2?.32:.23));feather.rotation.y=-side*.18;
-      }
-      if(id==='rock-pigeon'&&j<2){const bar=add(parent,new BoxGeometry(width*.92,L*.006,L*.027),dark,[side*width*.5,L*.005,-chord*.15]);bar.rotation.y=side*.1;}
-    });
-  }
-  const tail=new Group();tail.name='tail';tail.position.set(0,-L*.015,-L*.2);root.add(tail);rig.tail=tail;
-  for(let i=0;i<7;i++){
-    const fork=id==='black-kite'?Math.abs(i-3)*L*.018:0;
-    const feather=add(tail,new SphereGeometry(1,10,6),i%2?wingMat:bodyMat,[(i-3)*L*.025,0,-L*.16-fork*.5]);
-    feather.scale.set(L*.025,L*.008,L*.12+fork*.5);feather.rotation.y=(i-3)*.065;
-  }
-  // Folded feet remain tucked beneath the body in flight.
-  for(const side of [-1,1])strut(root,new Vector3(side*L*.04,-L*.06,-L*.08),new Vector3(side*L*.035,-L*.12,-L*.17),L*.008,dark);
+  const {root,rig}=createDetailedBird(id,palette,detailed);
   rigs.set(root,rig);return root;
 }
+
 function createPlaneModel(palette:ContactPalette){
   const root=new Group();root.name='drone-rc-cessna';
   const shell=material(palette,{color:0xdbe2e7,metalness:.12,roughness:.4},.5),carbon=material(palette,{color:0x222a32,roughness:.45},.45),glass=material(palette,{color:0x1c3544,metalness:.6,roughness:.15},.6);

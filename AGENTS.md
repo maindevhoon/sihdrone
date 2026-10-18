@@ -49,6 +49,8 @@ node --import tsx scripts/create-contact-models.mjs
 | `src/ContactModel.tsx` | R3F wrapper that places a contact model on the shared trajectory |
 | `src/SensorFeed.tsx` | EO/IR sensor camera that tracks a radar-cued contact |
 | `src/RecognitionGuide.tsx` | Recognition-cue reference shown in the situation panel |
+| `src/ModelLibrary.tsx`, `ModelStudio.tsx`, `recognition.ts` | Unscored recognition catalogue, shared-scale comparison and 3D inspection studio |
+| `src/birdGeometry.ts`, `airframeDetail.ts` | Reference-inspired feather/anatomy and aircraft details used by version-4 model builders |
 | `src/variations.ts` | Stable 200-seed library and shuffled selection deck |
 | `src/storage.ts` | Validation and persistence of completed sessions |
 | `src/SceneView.tsx` | Environment selection, HUD, sensor panel, radar track selection (portalled into the situation panel) |

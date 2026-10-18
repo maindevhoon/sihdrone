@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Box } from 'lucide-react';
 import type { Category, Difficulty } from './simulation';
 import { AIRFRAMES } from './airframes';
 import { useT } from './i18n';
@@ -28,7 +28,7 @@ const cues: { category: Category; title: string; points: string[] }[] = [
   ] },
 ];
 
-export default function RecognitionGuide({ difficulty }: { difficulty: Difficulty }) {
+export default function RecognitionGuide({ difficulty, onOpenLibrary, libraryDisabled=false }: { difficulty: Difficulty; onOpenLibrary?:()=>void; libraryDisabled?:boolean }) {
   // Challenge mode starts collapsed so trainees work from memory, but the guide stays available.
   const [open, setOpen] = useState<boolean | null>(null);
   const expanded = open ?? difficulty === 'guided';
@@ -47,6 +47,7 @@ export default function RecognitionGuide({ difficulty }: { difficulty: Difficult
           <tr><th scope="row">{t('Black kite')}</th><td>≈ 150 cm span</td><td>≈ 735 g</td></tr></tbody></table>
         <p>{t("Small UAS are roughly 0.3–1.4 m tip to tip; a kite spans about 1.5 m. Compare with the EO feed's SPAN estimate.")}</p>
       </div>
+      {onOpenLibrary&&<button className="guide-library-button" disabled={libraryDisabled} title={libraryDisabled?'Hold the exercise to open the model library':'Inspect and compare birds and aircraft in 3D'} onClick={onOpenLibrary}><Box size={14}/>Explore the 3D model library</button>}
     </div>}
   </section>;
 }

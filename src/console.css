@@ -381,3 +381,11 @@
   .decision-outcome { font-size:10px; }
   .decision-review-heading h3 { margin:14px 0 8px; }
 }
+
+/* Keep every workspace reachable when the recognition library adds a fifth tab. */
+.topbar .tabs{min-width:0}
+@media(max-width:640px){.topbar .tabs{overflow-x:auto;scrollbar-width:none;flex:1}.topbar .tabs button{flex-shrink:0;padding:0 5px}}
+
+.guide-library-button{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border:1px solid #ffffff29;border-radius:7px;background:#ffffff06;color:#d0ded6;font-size:11px;cursor:pointer;margin-top:12px}
+.guide-library-button:hover:not(:disabled){background:#ffffff11}
+.guide-library-button:disabled{opacity:.4;cursor:default}
