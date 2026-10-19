@@ -13,7 +13,7 @@ import { addMotion, consumeMotion, emptyMotion, hasMotion } from './earthNavigat
 
 type Orbit={target:Cartesian3;heading:number;pitch:number;range:number};
 type SafariGesture=Event & {scale:number;rotation:number};
-export type EarthNavigation={zoom:(logScale:number)=>void;north:()=>void;topDown:()=>void;cancel:()=>void;dispose:()=>void};
+export type EarthNavigation={zoom:(logScale:number)=>void;pan:(x:number,y:number)=>void;north:()=>void;topDown:()=>void;cancel:()=>void;dispose:()=>void};
 
 /** Smooth mouse/trackpad navigation; Cesium retains its two-finger touch pinch/tilt controls. */
 export function attachEarthNavigation(viewer:Viewer,options:{
@@ -216,6 +216,7 @@ export function attachEarthNavigation(viewer:Viewer,options:{
   window.addEventListener('blur',blur);document.addEventListener('visibilitychange',hidden);
   return {
     zoom:(logScale)=>schedule({kind:'zoom',logScale}),
+    pan:(x,y)=>schedule({kind:'pan',x,y}),
     north:()=>{stopQueue();camera.cancelFlight();options.onInteraction();const orbit=readOrbit();orbit.heading=0;apply(orbit);},
     topDown:()=>{stopQueue();camera.cancelFlight();options.onInteraction();const orbit=readOrbit();orbit.pitch=MIN_EARTH_PITCH;apply(orbit);},
     cancel:blur,

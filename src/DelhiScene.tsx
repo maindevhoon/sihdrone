@@ -9,8 +9,10 @@ import type { Scenario, CameraView } from './simulation';
 import ContactModel from './ContactModel';
 import TrackGate from './TrackGate';
 import FlightCamera from './FlightCamera';
+import PhoneCamera from './phone/PhoneCamera';
+import type { Pose } from './phone/protocol';
 
-type SceneProps = { scenario: Scenario; time: MutableRefObject<number>; selected: boolean; highlightedTrack?:number; onSelect: (id: number) => void; cameraView: CameraView; onBearingChange:(bearing:number)=>void; highQuality:boolean; thermal?:boolean;pilotCamera?:'chase'|'fpv'|'free';onFreeCamera?:()=>void };
+type SceneProps = { scenario: Scenario; time: MutableRefObject<number>; selected: boolean; highlightedTrack?:number; onSelect: (id: number) => void; cameraView: CameraView; onBearingChange:(bearing:number)=>void; highQuality:boolean; thermal?:boolean;phonePose?:MutableRefObject<Pose>;phoneGaze?:(id:number|null)=>void;pilotCamera?:'chase'|'fpv'|'free';onFreeCamera?:()=>void };
 /**
  * Apparent temperature (0 cold – 1 hot) of a district surface for the long-wave IR view: emitters
  * are hottest, sun-loaded dark surfaces (asphalt, tyres) warm, vegetation and glass cool.
@@ -161,7 +163,7 @@ function Metro({time}: {time:MutableRefObject<number>}) {
     </group>)}</group>
   </group>;
 }
-export default memo(function DelhiScene({scenario,time,selected,highlightedTrack,onSelect,cameraView,onBearingChange,highQuality,thermal=false,pilotCamera,onFreeCamera}: SceneProps) {
+export default memo(function DelhiScene({scenario,time,selected,highlightedTrack,onSelect,cameraView,onBearingChange,highQuality,thermal=false,phonePose,phoneGaze,pilotCamera,onFreeCamera}: SceneProps) {
   const lighting=lightingOf(scenario), dusk=lighting==='dusk', night=lighting==='night', lowLight=lighting!=='day';
   const textures=useMemo(()=>({stone:surfaceTexture('stone'),road:surfaceTexture('road'),grass:surfaceTexture('grass'),facade:surfaceTexture('facade',lowLight),windows:surfaceTexture('windows')}),[lowLight]);
   useEffect(()=>()=>{Object.values(textures).forEach(texture=>texture.dispose());},[textures]);
@@ -204,7 +206,7 @@ export default memo(function DelhiScene({scenario,time,selected,highlightedTrack
       {/* After an observation the sensor overlays a track gate, as an EO tracker would. */}
       {selected&&(highlightedTrack===undefined||highlightedTrack===index)&&<TrackGate scenario={scenario} time={time} index={index}/>}
     </ContactModel>)}
-    {pilotCamera&&pilotCamera!=='free'?<FlightCamera scenario={scenario} time={time} mode={pilotCamera} onFree={onFreeCamera} onBearing={onBearingChange}/>:<CameraRig view={cameraView} onBearingChange={onBearingChange} physical={scenario.version===4}/>}
+    {phonePose?<PhoneCamera pose={phonePose} onBearing={onBearingChange} scenario={scenario} time={time} onGaze={phoneGaze}/>:pilotCamera&&pilotCamera!=='free'?<FlightCamera scenario={scenario} time={time} mode={pilotCamera} onFree={onFreeCamera} onBearing={onBearingChange}/>:<CameraRig view={cameraView} onBearingChange={onBearingChange} physical={scenario.version===4}/>}
     <ThermalLook enabled={thermal} dusk={lowLight}/>
   </>;
 });

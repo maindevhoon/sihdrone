@@ -18,7 +18,10 @@ import { Compass, Home, Minus, Plus, HelpCircle } from 'lucide-react';
 import GestureTutorial from './GestureTutorial';
 import { birdAttitude, contactKinematics, droneAttitude, wingBeat } from './kinematics';
 import { airframeFor } from './airframes';
-import { Euler, Quaternion as ThreeQuaternion } from 'three';
+import { Euler, Quaternion as ThreeQuaternion, Vector3 as ThreeVector3 } from 'three';
+import { PhoneMapLook } from './phone/mapLook';
+import { pickGaze } from './phone/orientation';
+import type { Pose, PhoneControls } from './phone/protocol';
 import { sampleFlight } from './flightRuntime';
 import { FLIGHT_PROFILES } from './flightProfiles';
 import { rotate, add, scale } from './flightMath';
@@ -30,6 +33,7 @@ type Props = {
   onBearingChange: (bearing: number) => void; onStatus: (status: string) => void; onGround?: (height: number) => void;
   onObserverChange: (observer: Position) => void;
   onHome:()=>void; onTutorialOpen:()=>void; input:NavigationInput; onInputChange:(input:NavigationInput)=>void;
+  phonePaired?:boolean;phonePose?:MutableRefObject<Pose>;phoneControls?:MutableRefObject<PhoneControls>;phoneGaze?:(id:number|null)=>void;
   pilotCamera?:'chase'|'fpv'|'free';onFreeCamera?:()=>void;
 };
 const env = (import.meta as ImportMeta & {env: Record<string, string | undefined>}).env;
@@ -86,7 +90,7 @@ export default function EarthScene(props: Props) {
   const previousView = useRef(props.cameraView);
   const {input}=props;
   const [help,setHelp]=useState(() => {
-    if(props.pilotCamera)return false;
+    if(props.pilotCamera||props.phonePaired)return false;
     try { return sessionStorage.getItem('aeron-gesture-guide-v2') !== 'seen'; }
     catch { return true; }
   });
@@ -196,7 +200,9 @@ export default function EarthScene(props: Props) {
     };
     let contactConfig = '', lastDatum = NaN;
     const lastCameraPosition = new Cartesian3(), lastCameraDirection = new Cartesian3();
-    let lastFollow=performance.now();
+    let lastFollow=performance.now(),lastPhone=performance.now(),lastAim:number|null=null;
+    const phoneLook=new PhoneMapLook();let phoneActive=false;
+    const phoneEye=new ThreeVector3(),phoneDirection=new ThreeVector3();
     const update = viewer.scene.preRender.addEventListener(() => {
       const {pilotCamera,scenario:flightScenario}=current.current;
       if(pilotCamera&&pilotCamera!=='free'&&flightScenario.flight){
@@ -212,6 +218,28 @@ export default function EarthScene(props: Props) {
         viewer.camera.frustum.near=.05;
         viewer.camera.setView({destination:dest,orientation:{direction,up:worldUp}});
       }else lastFollow=performance.now();
+      const phone=current.current.phonePose,nowPhone=performance.now();
+      if(phone){
+        if(!phoneActive){navigation.current?.cancel();viewer.camera.cancelFlight();phoneLook.reset();}
+        phoneActive=true;interacted.current=true;
+        const control=current.current.phoneControls?.current;
+        const look=phoneLook.update({heading:viewer.camera.heading,pitch:viewer.camera.pitch},phone.current,control?.revision??0,(nowPhone-lastPhone)/1000);
+        viewer.camera.setView({orientation:{heading:look.heading,pitch:look.pitch,roll:0}});
+        for(const command of control?.queue.splice(0)??[]){
+          if(command.control==='zoom')navigation.current?.zoom(command.amount);
+          if(command.control==='pan')navigation.current?.pan(command.x,command.y);
+          if(command.control==='north')navigation.current?.north();
+          if(command.control==='home')home.current();
+        }
+        const camera=viewer.camera;
+        phoneEye.set(camera.positionWC.x,camera.positionWC.y,camera.positionWC.z);
+        phoneDirection.set(camera.directionWC.x,camera.directionWC.y,camera.directionWC.z);
+        const contacts=current.current.time.current>=current.current.scenario.arrival?Array.from({length:current.current.scenario.count},(_,id)=>{const p=contactPoint(id);return {id,position:[p.x,p.y,p.z] as [number,number,number]};}):[];
+        const aimed=pickGaze(phoneEye,phoneDirection,contacts);
+        if(aimed!==lastAim){lastAim=aimed;current.current.phoneGaze?.(aimed);}
+      }else if(phoneActive){phoneLook.reset();phoneActive=false;lastAim=null;current.current.phoneGaze?.(null);}
+      lastPhone=nowPhone;
+      if(container.current)container.current.dataset.phoneController=phone?'active':'off';
       // Cesium's percentage-based changed event can miss a short drag. Check the pose as well,
       // including native drag inertia, camera flights and asynchronous airspace-datum updates.
       if (!Cartesian3.equals(lastCameraPosition, viewer.camera.positionWC) ||
@@ -265,7 +293,7 @@ export default function EarthScene(props: Props) {
     home.current=()=>{
       navigation.current?.cancel();viewer.camera.cancelFlight();interacted.current=true;
       previousView.current='overview';
-      frameCamera(viewer, current.current.theatre, 'overview', groundHeight.current, .6);updateCamera();current.current.onHome();
+      frameCamera(viewer, current.current.theatre, 'overview', groundHeight.current, current.current.phonePose?0:.6);updateCamera();current.current.onHome();
     };
     navigation.current=attachEarthNavigation(viewer,{
       input:()=>current.current.input,
@@ -343,6 +371,7 @@ export default function EarthScene(props: Props) {
     interacted.current=true;
     frameCamera(viewer, current.current.theatre, props.cameraView, groundHeight.current, .8);
   },[props.cameraView]);
+  useEffect(()=>{if(props.phonePaired)setHelp(false);},[props.phonePaired]);
   useEffect(() => { if (help) current.current.onTutorialOpen(); }, [help]);
   useEffect(() => { navigation.current?.cancel(); }, [props.input]);
   useEffect(() => {

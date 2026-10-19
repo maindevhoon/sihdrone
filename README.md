@@ -173,3 +173,9 @@ The debrief and Progress page recommend a fresh numbered variation using recorde
 
 
 Night and fog are simulated display conditions in the district, Earth view and EO/IR feed. Earth view dims existing daytime satellite imagery or 3D tile textures; it does not provide nighttime satellite photography. Fog and thermal contrast are illustrative approximations, not validated atmospheric or sensor models. Conditions are retained in results, repeats, replay and exports. Optional `lighting` and `fog` scenario fields are additive: older Day/Dusk records remain valid under the existing session and scenario versions, and contact generation, trajectories and scoring are unchanged.
+
+## Phone controller companion
+
+An optional QR-paired Android controller operates the laptop's local district and geographic Earth theatres, including Galwan Valley and Tololing. The phone primarily sends calibrated orientation, touch pan/zoom, track cues and explicit observation/classification inputs. The laptop renders the scene, owns the exercise clock and saves results. Its view remains visible during pairing and hold; remote camera movement does not advance a held clock. The default phone controller does not load a renderer or compile flight traces.
+
+After `npm run build`, use `npm run phone:wireless` (requires `cloudflared`) for a temporary HTTPS invitation, or `npm run phone:demo` with Android USB forwarding. Open `http://localhost:4173` on the laptop, select a theatre, then choose its phone icon. The Vercel site does not run this local relay. See [controller setup and limitations](docs/PHONE-DEMO.md). The original district handheld renderer remains an opt-in development view; split-eye rendering is experimental and reliable volume-button controls require native integration.
