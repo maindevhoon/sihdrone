@@ -141,13 +141,13 @@ export default function App() {
     if(detectionRef.current===null){detectionRef.current=time.current;setDetected(time.current);}
     setNotice('');
   },[scenario,selectedTrack]);
-  const classify=useCallback((value:Category)=>{
+  const classify=useCallback((value:Category, trackId=selectedTrack)=>{
     if(phaseRef.current!=='running')return;
     if(scenario.version>=3){
-      const track=tracksRef.current[selectedTrack];if(!track||track.detection===null||track.answer===value)return;
-      const next=tracksRef.current.map(item=>item.id===selectedTrack?{...item,answer:value}:item);
+      const track=tracksRef.current[trackId];if(!track||track.detection===null||track.answer===value)return;
+      const next=tracksRef.current.map(item=>item.id===trackId?{...item,answer:value}:item);
       tracksRef.current=next;setTracks(next);
-      events.current.push({time:time.current,type:'classification',trackId:selectedTrack,answer:value,label:`${trackLabel(selectedTrack)} classified as ${value.toLowerCase()}`});
+      events.current.push({time:time.current,type:'classification',trackId,answer:value,label:`${trackLabel(trackId)} classified as ${value.toLowerCase()}`});
     }else{
       if(detectionRef.current===null||answerRef.current===value)return;
       answerRef.current=value;setAnswer(value);events.current.push({time:time.current,type:'classification',label:`Classified as ${value.toLowerCase()}`});
@@ -220,7 +220,7 @@ export default function App() {
       <section className="stage" id="exercise-workspace">{review&&result?<Review practicePlan={practicePlan} key={result.id} session={result} history={history} profile={profile} theatre={theatre} onTheatreChange={changeTheatre} onSelectSession={selectSession} onRepeat={()=>repeat(result)} onNext={nextChallenge}/>:<>
         <header className="workspace-heading"><div><span className="section-label">{tr('LIVE WORKSPACE')}</span><h2>{tr('Your training workspace')}</h2></div><div className="workspace-status"><span className={`workspace-mode ${phase==='running'?'is-live':''}`}><span className="state-dot"/>{tr(phase==='ready'?'Unscored preview':phase==='paused'?'Exercise on hold':'Exercise in progress')}</span><button className="setup-shortcut" onClick={()=>document.getElementById('mission-setup')?.scrollIntoView({block:'start'})}><SlidersHorizontal size={12}/>{tr('Setup')}</button></div></header>
         <div className="workflow-strip" role="group" aria-label={tr('Exercise procedure')}><span className={currentDetection===null?'active':'complete'}><b>{currentDetection!==null?<Check size={11}/>:'01'}</b>{tr('Observe')}</span><i/><span className={currentAnswer?'complete':currentDetection!==null?'active':''}><b>{currentAnswer?<Check size={11}/>:'02'}</b>{tr('Identify')}</span><i/><span><b>03</b>{tr('Debrief')}</span><p>{tr(instruction)}</p></div>
-        <Suspense fallback={<div className="scene scene-loading"><span className="loader"/><p>Preparing the sensor view…</p></div>}><SceneView scenario={scenario} time={time} displayTime={phase==='ready'?previewElapsed:elapsed} selected={currentDetection!==null} selectedTrack={selectedTrack} onTrackChange={setSelectedTrack} decisions={perTrack?tracks:undefined} phase={phase==='ready'?'preview':phase==='paused'?'paused':'running'} cameraView={cameraView} onCameraChange={setCameraView} onSelect={mark} onResume={resume} onPause={pause} previewPlaying={previewAdvancing} onTogglePreview={togglePreview} onNotice={setNotice} radarTarget={radarSlot} assessment={currentAnswer} theatre={theatre} onTheatreChange={changeTheatre}/></Suspense>
+        <Suspense fallback={<div className="scene scene-loading"><span className="loader"/><p>Preparing the sensor view…</p></div>}><SceneView scenario={scenario} time={time} displayTime={phase==='ready'?previewElapsed:elapsed} selected={currentDetection!==null} selectedTrack={selectedTrack} onTrackChange={setSelectedTrack} decisions={perTrack?tracks:undefined} phase={phase==='ready'?'preview':phase==='paused'?'paused':'running'} cameraView={cameraView} onCameraChange={setCameraView} onSelect={mark} onPhoneClassify={classify} onResume={resume} onPause={pause} previewPlaying={previewAdvancing} onTogglePreview={togglePreview} onNotice={setNotice} radarTarget={radarSlot} assessment={currentAnswer} theatre={theatre} onTheatreChange={changeTheatre}/></Suspense>
         <div className="session-bar">
           <button className="session-action" onClick={primary.action}>{primary.icon}{tr(primary.label)}</button>
           <div className="session-clock mono">{formatTime(elapsed)}<span> / {formatTime(scenario.duration)}</span></div>

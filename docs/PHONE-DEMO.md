@@ -1,0 +1,68 @@
+# Phone controller demo
+
+The phone is primarily a motion and touch controller. The laptop renders the selected theatre, including **Galwan Valley, Tololing and the other mountain sites**, with its existing Cesium satellite imagery and 3D terrain. The phone does not load Cesium, compile flight traces, or render a duplicate scene in its default mode. It sends small orientation, navigation and decision messages, so video bandwidth is not required.
+
+## Wireless on a Mac
+
+```sh
+npm ci
+npm run build
+brew install cloudflared
+npm run phone:wireless
+```
+
+Open **http://localhost:4173** on the laptop. Select **Galwan Valley** or **Tololing**, wait for terrain and flight preparation, then choose the phone icon in the scene toolbar. Once the terminal prints **Wireless ready**, the QR uses its temporary HTTPS tunnel. Scan it with Android and open in Chrome. Both devices need Internet for this wireless setup; they need not share Wi-Fi. Cloudflare carries the connections to the laptop's local relay. Quick Tunnels are temporary demonstration infrastructure.
+
+1. Hold the phone in landscape or portrait, facing forward. Tap **Enable motion**, then **Recenter**.
+2. The laptop QR closes automatically when the phone joins. Unscored preview plays; the laptop remains the display. During a live exercise, pairing first holds its clock and requires an explicit resume.
+3. Turn the phone to look left/right; tilt it to look up/down. On maps this changes viewing direction from the current geographic camera position, preserving the initial valley or mountain framing. Roll is levelled for comfort.
+4. With motion enabled, **swipe the pad to pan** and **pinch to zoom**. The **Zoom in / Zoom out**, **North**, and **Site** controls also work. Pan and zoom reuse the laptop's terrain-aware navigation limits and easing. Recenter preserves the current map position and resets the phone's reference.
+5. Without sensor access use **Drag look** on the pad. **Motion / pan** restores gyro input and touch panning. Pan/zoom/site controls are available in geographic theatres.
+6. The controller reports the laptop reticle's aimed track. When no contact is under it, it identifies the explicitly selected radar track as a **radar cue**. **Next track** selects and cues EO/IR without recording an observation.
+7. Start the exercise on the laptop. Tap **Observe**, then a category for the selected, observed track. Decisions are recorded and scored by the laptop only. The phone's returned observation/classification state confirms receipt.
+8. **Hold** pauses a live exercise. The laptop keeps its rendered view visible and the phone camera remains usable while held; the hold message is a compact banner. Resume on the laptop. Leaving either active browser tab or losing the phone connection holds a live exercise; reconnect does not automatically resume it.
+9. Review the existing debrief and paused replay on the laptop. Saved results and scoring remain unchanged by camera/navigation controls. New pairing is disabled in replay.
+
+The local Delhi-inspired district retains motion-controlled viewing and tagging. Geographic theatre changes retain the room, update its epoch, clear queued navigation, and reset the camera reference for the new site. Physics trace preparation remains on the laptop before its exercise clock can advance. The controller waits for that preparation before accepting scored decisions.
+
+Ctrl+C stops the relay and tunnel. Rebuild after source changes. Restarting the relay invalidates invitations and generates a new tunnel URL; scan the fresh QR. The standalone Vercel deployment does not run this local demo relay.
+
+## USB fallback
+
+Install Google's Android platform tools if needed (`brew install --cask android-platform-tools` on Mac). Enable Android Developer options and USB debugging, connect a data-capable cable, and accept authorization on the phone.
+
+```sh
+npm run phone:demo
+adb devices
+adb reverse tcp:4173 tcp:4173
+```
+
+Open **http://localhost:4173** on the laptop, choose the phone icon and use **http://localhost:4173** as the invitation base URL. The forwarded localhost is a secure browser context on Android. Scan the QR, or open that exact invitation link manually in Chrome if the scanner refuses a localhost link. All controller traffic uses ADB forwarding; no wireless connection or WebRTC transport is required. Earth imagery and terrain still require Internet on the laptop.
+
+Afterwards remove forwarding with `adb reverse --remove tcp:4173` and disconnect the cable. USB fallback is explicit, because it requires device authorization and a new localhost invitation.
+
+## Sensors, limits and pairing
+
+- Browser/Android orientation combines available sensor inputs into three-axis rotation. Screen rotation is compensated; recenter after changing how you hold the device.
+- Accelerometer and rotation-rate readings are diagnostics. Acceleration is not integrated into walking position. No GPS, camera or microphone permission is needed.
+- Screen wake lock and short vibration feedback are optional. A vibration acknowledges a send, not successful recording.
+- **O** observes the displayed aimed/radar-cued track; **1–3** classify the selected observed track. A delivered AudioVolumeUp event is accepted best-effort, but reliable physical volume-button handling requires native Android integration.
+- This is a controller demonstration, not calibrated headset VR or positional tracking. The original local-district handheld renderer remains an opt-in development view at `/phone?view=handheld#pair=…`; its split-eye option is an uncalibrated stereo preview. Use the default controller for geographic theatres.
+- Scene data are synthetic. Esri imagery on terrain is not verified photorealistic 3D-building coverage or surveyed collision geometry.
+- Rooms are in memory, limited to 32, and expire after two hours. The host capability is separate from the bearer invitation and is never included in its QR. Do not share the QR beyond the intended phone. No account or result database is introduced.
+
+## Troubleshooting
+
+- **Motion unavailable on plain LAN HTTP:** use the HTTPS tunnel or USB-forwarded localhost.
+- **Relay unavailable on the production website:** open the local laptop URL printed by the script.
+- **Waiting / another phone already joined / expired invitation:** end pairing and scan a fresh QR.
+- **Motion remains waiting:** allow motion sensors in Chrome site settings, retry and recenter. Drag look is available without sensors.
+- **Very steep view:** recenter, then use Site or a laptop camera preset after disconnecting. Phone tilt is bounded; camera translation remains constrained by the existing approximate terrain checks.
+- **Imagery missing:** check laptop Internet/provider status. The controller still reports connection separately from terrain loading.
+- **Wireless drops:** hold the exercise and use the USB procedure. The laptop render does not depend on a video stream.
+
+## Verification
+
+Run `npm test` and `npm run build`. Phone tests cover malformed commands, room isolation, host authentication, stale/paused/replay decision rejection, heading wrap, recentering, camera rebasing after desktop navigation, bounded tilt and frame-rate-independent easing. Browser checks must include the mountain and valley renderers, remote pan/zoom, held-clock rotation, laptop preview visibility, phone controls, radar/EO agreement and lifecycle cleanup. Physical OnePlus sensor smoothness still needs a handset check.
+
+Sources: [MDN orientation events](https://developer.mozilla.org/en-US/docs/Web/API/Device_orientation_events/Detecting_device_orientation), [Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).

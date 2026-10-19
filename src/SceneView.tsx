@@ -2,10 +2,12 @@ import { lightingOf, visibilityLabel } from './environment';
 import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Canvas } from '@react-three/fiber';
-import { Focus, MapPin, Maximize2, Minus, Pause, Play, Plus, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { Focus, Smartphone, MapPin, Maximize2, Minus, Pause, Play, Plus, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 const EarthScene = lazy(() => import('./EarthScene'));
 const DelhiScene = lazy(() => import('./DelhiScene'));
 import Radar from './Radar';
+import { usePhoneHost, PhonePairDialog } from './phone/PhonePair';
+import './phone/phone.css';
 import type { ReplayCheckpoint } from './reviewEvidence';
 import { DEFAULT_RADAR_OBSERVER } from './radarMath';
 import SensorFeed, { type SensorMode, type SensorTelemetry } from './SensorFeed';
@@ -21,7 +23,7 @@ class SceneBoundary extends Component<{children:ReactNode;label:string},{failed:
   static getDerivedStateFromError(){return {failed:true};}
   render(){return this.state.failed?<div className="canvas-error"><Focus size={28}/><h3>{this.props.label} unavailable</h3><p>Enable hardware acceleration in your browser.</p></div>:this.props.children;}
 }
-type Props = { scenario:Scenario; time:MutableRefObject<number>; displayTime:number; selected:boolean; phase:'preview'|'running'|'paused'|'replay'; cameraView:CameraView; onCameraChange:(view:CameraView)=>void; onSelect:(id?:number)=>void; selectedTrack?:number; onTrackChange?:(id:number)=>void; decisions?:TrackDecision[]; onResume?:()=>void; onPause?:()=>void; previewPlaying?:boolean; onTogglePreview?:()=>void; replayPlaying?:boolean; replayFocus?:ReplayCheckpoint; onNotice?:(notice:string)=>void; radarTarget?:HTMLElement|null; assessment?:Category|''; theatre:Theatre; onTheatreChange:(id:TheatreId)=>void; pilotCamera?:'chase'|'fpv'|'free'; onPilotCamera?:(camera:'chase'|'fpv'|'free')=>void };
+type Props = { scenario:Scenario; time:MutableRefObject<number>; displayTime:number; selected:boolean; phase:'preview'|'running'|'paused'|'replay'; cameraView:CameraView; onCameraChange:(view:CameraView)=>void; onSelect:(id?:number)=>void; onPhoneClassify?:(answer:Category,id:number)=>void; selectedTrack?:number; onTrackChange?:(id:number)=>void; decisions?:TrackDecision[]; onResume?:()=>void; onPause?:()=>void; previewPlaying?:boolean; onTogglePreview?:()=>void; replayPlaying?:boolean; replayFocus?:ReplayCheckpoint; onNotice?:(notice:string)=>void; radarTarget?:HTMLElement|null; assessment?:Category|''; theatre:Theatre; onTheatreChange:(id:TheatreId)=>void; pilotCamera?:'chase'|'fpv'|'free'; onPilotCamera?:(camera:'chase'|'fpv'|'free')=>void };
 type ThermalPalette='white'|'black'|'iron';
 const paletteLabels:Record<ThermalPalette,string>={white:'White hot',black:'Black hot',iron:'Ironbow'};
 const zoomLevels=[{factor:6,label:'WFOV'},{factor:2.5,label:'MFOV'},{factor:1,label:'NFOV'}];
@@ -33,11 +35,17 @@ function HeadingTape({bearing}:{bearing:number}) {
     <strong>{bearing.toString().padStart(3,'0')}°</strong>
   </div>;
 }
-export default function SceneView({scenario,time,displayTime,selected,phase,cameraView,onCameraChange,onSelect,onResume,onPause,previewPlaying=false,onTogglePreview,replayPlaying=false,replayFocus,onNotice,radarTarget,assessment='',theatre,onTheatreChange,selectedTrack,onTrackChange,decisions,pilotCamera,onPilotCamera}:Props) {
+export default function SceneView({scenario,time,displayTime,selected,phase,cameraView,onCameraChange,onSelect,onPhoneClassify,onResume,onPause,previewPlaying=false,onTogglePreview,replayPlaying=false,replayFocus,onNotice,radarTarget,assessment='',theatre,onTheatreChange,selectedTrack,onTrackChange,decisions,pilotCamera,onPilotCamera}:Props) {
   const preparation=useFlightPreparation(scenario);
+  const [aimedTrack,setAimedTrack]=useState<number|null>(null);
   const [bearing,setBearing]=useState(0);
-  const world=isGeographic(theatre)?'earth':'training';
   const [earthStatus,setEarthStatus]=useState('Loading satellite imagery and 3D terrain…');
+  const phone=usePhoneHost({scenario,time,phase,theatre:theatre.id,prepared:preparation.ready,aimedTrack,bearing,status:isGeographic(theatre)?earthStatus:'Local training district',onConnected:()=>{if(phase==='preview'&&!previewPlaying)onTogglePreview?.();},onControl:control=>{if(control.control==='next-track')cue((track+1)%scenario.count);},playing:phase==='running'||(phase==='preview'&&previewPlaying)||(phase==='replay'&&replayPlaying),decisions,selectedTrack:selectedTrack??0,onHold:()=>onPause?.(),onAction:action=>{
+    if(action.type==='observe')inspect(action.track);
+    else {setTrack(action.track);onPhoneClassify?.(action.answer,action.track);}
+  }});
+  const world=isGeographic(theatre)?'earth':'training';
+  useEffect(()=>{setAimedTrack(null);},[theatre,scenario]);
   const [ground,setGround]=useState<number|null>(null);
   const [earthObserver,setEarthObserver]=useState<Position>(DEFAULT_RADAR_OBSERVER);
   const observer=world==='earth'?earthObserver:DEFAULT_RADAR_OBSERVER;
@@ -50,7 +58,8 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
   const [localTrack,setLocalTrack]=useState(0);
   const track=selectedTrack ?? localTrack;
   const setTrack=useCallback((id:number)=>{setLocalTrack(id);onTrackChange?.(id);},[onTrackChange]);
-  function inspect(id:number){setTrack(id);setSensorCue(true);setSensorOpen(true);onSelect(id);}
+  function cue(id:number){setTrack(id);setSensorCue(true);setSensorOpen(true);}
+  function inspect(id:number){cue(id);onSelect(id);}
   const [sensorCue,setSensorCue]=useState(false);
   const [sensorMode,setSensorMode]=useState<SensorMode>('eo');
   const [zoomIndex,setZoomIndex]=useState(2);
@@ -122,9 +131,9 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
   const stateLabel=phase==='running'?'LIVE':phase==='paused'?'HOLD':phase==='replay'?'REPLAY':'PREVIEW';
   const radar=<Radar scenario={scenario} time={displayTime} selected={trackObserved} paused={phase==='paused'||(phase==='preview'&&!previewPlaying)||(phase==='replay'&&!replayPlaying)} preview={phase==='preview'} replay={phase==='replay'} onTogglePreview={onTogglePreview} bearing={bearing} metresPerUnit={metresPerUnit} observer={observer} mapFollow={world==='earth'} track={track} assessment={assessment} decisions={decisions} onTrack={id=>{setTrack(id);setSensorCue(true);setSensorOpen(true);}} onSelect={inspect}/>;
   const trackLabel=`T${(Math.min(track,scenario.count-1)+1).toString().padStart(2,'0')}`;
-  return <div ref={sceneRef} className={`scene ${phase==='replay'?'replay-scene':''} world-${world}`}>
+  return <div ref={sceneRef} className={`scene ${phase==='replay'?'replay-scene':''} world-${world} ${phone.connected?'phone-paired':''}`}>
     <svg className="filter-defs" aria-hidden><filter id="thermal-iron" colorInterpolationFilters="sRGB"><feComponentTransfer><feFuncR type="table" tableValues="0 .25 .62 .9 1 1"/><feFuncG type="table" tableValues="0 0 .08 .38 .76 1"/><feFuncB type="table" tableValues="0 .42 .5 .08 0 .85"/></feComponentTransfer></filter></svg>
-    <div className={`main-view ${thermalActive?`thermal palette-${palette}`:''}`}><SceneBoundary label="3D view"><Suspense fallback={<div className="canvas-error"><span className="loader"/>Preparing the scene…</div>}>{world==='earth'?<EarthScene scenario={scenario} time={time} selected={contactHighlighted} highlightedTrack={track} theatre={theatre} labels={labels} onSelect={inspect} cameraView={cameraView} onBearingChange={updateBearing} onObserverChange={updateObserver} highQuality={quality==='high'} onStatus={setEarthStatus} onGround={setGround} onHome={()=>onCameraChange('overview')} input={earthInput} onInputChange={setEarthInput} onTutorialOpen={()=>onPause?.()} pilotCamera={pilotCamera} onFreeCamera={()=>onPilotCamera?.('free')}/>:<Canvas shadows camera={{position:[28,22,42],fov:44,near:.2,far:600}} dpr={quality==='high'?[1,2]:[1,1.25]} gl={{antialias:true,toneMappingExposure:.9}}><DelhiScene scenario={scenario} time={time} selected={contactHighlighted} highlightedTrack={track} onSelect={inspect} cameraView={cameraView} onBearingChange={updateBearing} highQuality={quality==='high'} thermal={thermalActive} pilotCamera={pilotCamera} onFreeCamera={()=>onPilotCamera?.('free')}/></Canvas>}</Suspense></SceneBoundary></div>
+    <div className={`main-view ${thermalActive?`thermal palette-${palette}`:''}`}><SceneBoundary label="3D view"><Suspense fallback={<div className="canvas-error"><span className="loader"/>Preparing the scene…</div>}>{world==='earth'?<EarthScene scenario={scenario} time={time} selected={contactHighlighted} highlightedTrack={track} theatre={theatre} labels={labels} onSelect={inspect} cameraView={cameraView} onBearingChange={updateBearing} onObserverChange={updateObserver} highQuality={quality==='high'} onStatus={setEarthStatus} onGround={setGround} onHome={()=>onCameraChange('overview')} phonePaired={phone.connected} phonePose={phone.tracking?phone.pose:undefined} phoneControls={phone.controls} phoneGaze={setAimedTrack} input={earthInput} onInputChange={setEarthInput} onTutorialOpen={()=>onPause?.()} pilotCamera={pilotCamera} onFreeCamera={()=>onPilotCamera?.('free')}/>:<Canvas shadows camera={{position:[28,22,42],fov:44,near:.2,far:600}} dpr={quality==='high'?[1,2]:[1,1.25]} gl={{antialias:true,toneMappingExposure:.9}}><DelhiScene scenario={scenario} time={time} selected={contactHighlighted} highlightedTrack={track} onSelect={inspect} cameraView={cameraView} onBearingChange={updateBearing} highQuality={quality==='high'} thermal={thermalActive} phonePose={phone.tracking?phone.pose:undefined} phoneGaze={setAimedTrack} pilotCamera={pilotCamera} onFreeCamera={()=>onPilotCamera?.('free')}/></Canvas>}</Suspense></SceneBoundary></div>
     {!preparation.ready&&<div className="flight-loading" role="status"><span className="loader"/><strong>{preparation.error||'Compiling the flight…'}</strong>{preparation.error&&<button onClick={preparation.retry}>Retry flight</button>}</div>}
     <div className="scene-vignette" aria-hidden/>
     <div className="scene-hud-top">
@@ -135,6 +144,7 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
       </div>
       <HeadingTape bearing={bearing}/>
       <div className="scene-tools">
+        {!pilotCamera&&<button className="icon-button" disabled={phase==='replay'} title="Pair a phone controller with QR · works in valleys and mountains" aria-label="Pair phone view" aria-pressed={phone.connected} onClick={()=>{onPause?.();phone.open();}}><Smartphone size={15}/></button>}
         <label className="theatre-control"><span className="sr-only">Theatre</span><select aria-label="Theatre" disabled={scenario.version===4&&phase!=='preview'} value={theatre.id} onChange={e=>onTheatreChange(e.target.value as TheatreId)}>{THEATRES.map(t=><option key={t.id} value={t.id}>{t.kind==='synthetic'?'3D training district':`${t.name} · ${t.region.split(',').at(-1)!.trim()}`}</option>)}</select></label>
         {world==='earth'&&<button className="icon-button" aria-pressed={labels} title={labels?'Hide site label':'Show site label'} aria-label={labels?'Hide site label':'Show site label'} onClick={()=>setLabels(v=>!v)}><MapPin size={15}/></button>}
         <button className="icon-button" title={scenario.category==='Bird'?'Rotor audio (kites are silent at range)':audioOn?'Mute rotor audio (M)':'Unmute rotor audio (M)'} aria-label={audioOn?'Mute rotor audio':'Unmute rotor audio'} aria-pressed={!audioOn} onClick={toggleAudio}>{audioOn?<Volume2 size={15}/>:<VolumeX size={15}/>}</button>
@@ -143,7 +153,7 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
     </div>
     <div className="view-modes"><div className="segmented-dark" role="group" aria-label="Sensor band"><button aria-pressed={!thermalActive} onClick={()=>setThermal(false)}>Visible</button><button aria-pressed={thermalActive} disabled={world==='earth'} title={world==='earth'?'Thermal view needs the 3D training district: satellite photos contain no heat data':'Long-wave infrared view (H)'} onClick={()=>setThermal(true)}>Thermal</button></div>
       {thermalActive&&<label className="palette-control"><span className="sr-only">Thermal palette</span><select aria-label="Thermal palette" value={palette} onChange={e=>setPalette(e.target.value as ThermalPalette)}>{(Object.keys(paletteLabels) as ThermalPalette[]).map(p=><option key={p} value={p}>{paletteLabels[p]}</option>)}</select></label>}</div>
-    <div className="camera-presets segmented-dark" role="group" aria-label="Camera position">{pilotCamera?(['chase','fpv','free'] as const).map(view=><button key={view} aria-pressed={pilotCamera===view} onClick={()=>onPilotCamera?.(view)}>{view==='fpv'?'FPV':view==='chase'?'Chase':'Free map'}</button>):views.map(view=><button key={view.id} aria-pressed={cameraView===view.id} onClick={()=>onCameraChange(view.id)}>{view.label}</button>)}</div>
+    <div className="camera-presets segmented-dark" role="group" aria-label="Camera position">{pilotCamera?(['chase','fpv','free'] as const).map(view=><button key={view} aria-pressed={pilotCamera===view} onClick={()=>onPilotCamera?.(view)}>{view==='fpv'?'FPV':view==='chase'?'Chase':'Free map'}</button>):views.map(view=><button key={view.id} disabled={phone.tracking} aria-pressed={cameraView===view.id} onClick={()=>onCameraChange(view.id)}>{view.label}</button>)}</div>
     <div className="reticle" aria-hidden><span/><span/><span/><span/></div>
     {sensorOpen?<section className={`eo-panel ${sensorActive?'eo-live':''} eo-${sensorMode} palette-${palette}`} aria-label="Electro-optical sensor feed">
       <header className="eo-head"><span className="eo-name">{sensorActive?trackLabel:'EO-1'} <i>{sensorMode==='ir'?`IR · ${{white:'WH',black:'BH',iron:'IRON'}[palette]}`:lightingOf(scenario)==='night'?'NIGHT TV':'DAY TV'}</i></span>
@@ -161,6 +171,8 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
     </section>:<button className="eo-show" onClick={()=>setSensorOpen(true)}><Video size={14}/>Show EO/IR sensor</button>}
     {radarTarget?createPortal(radar,radarTarget):radar}
     <div className="scene-bottom"><span className="scene-hint">{world==='earth'?(earthInput==='trackpad'?'Click-drag to pan · Two-finger scroll to orbit · Pinch to zoom':'Drag to pan · Scroll to zoom · Right-drag to orbit'):'Drag to orbit · Scroll to zoom · Click an aircraft to observe'}</span><label className="quality-control"><span>GFX</span><select aria-label="Graphics quality" value={quality} onChange={e=>setQuality(e.target.value as 'balanced'|'high')}><option value="balanced">Balanced</option><option value="high">High</option></select></label></div>
-    {phase==='paused'&&<div className="pause-overlay"><Pause size={26}/><h3>Exercise on hold</h3><p>Contact motion, radar sweep and the exercise clock are frozen.</p><button onClick={onResume}><Play size={15}/>Resume</button></div>}
+    <PhonePairDialog phone={phone}/>
+    {phone.connected&&<div className="phone-host-badge">PHONE CONTROLLER · {phone.rtt===null?'Connected':`${phone.rtt} ms relay`}<button onClick={phone.open}>Manage</button><button onClick={phone.end}>Disconnect</button></div>}
+    {phase==='paused'&&<div className={`pause-overlay ${phone.connected?'phone-held-banner':''}`}><Pause size={26}/><h3>Exercise on hold</h3><p>Contact motion, radar sweep and the exercise clock are frozen.</p><button onClick={onResume}><Play size={15}/>Resume</button></div>}
   </div>;
 }
