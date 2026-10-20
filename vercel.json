@@ -28,6 +28,7 @@
     }
   },
   "rewrites": [
+    { "source": "/phone", "destination": "/index.html" },
     {
       "source": "/api/phone/status",
       "destination": "/api/phone?route=status"
