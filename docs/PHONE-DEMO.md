@@ -2,6 +2,21 @@
 
 The phone is primarily a motion and touch controller. The laptop renders the selected theatre, including **Galwan Valley, Tololing and the other mountain sites**, with its existing Cesium satellite imagery and 3D terrain. The phone does not load Cesium, compile flight traces, or render a duplicate scene in its default mode. It sends small orientation, navigation and decision messages, so video bandwidth is not required.
 
+## Online pairing on Vercel
+
+Open the deployed app on the laptop, select Galwan Valley or Tololing, and choose the phone icon. Scan the QR in Chrome on Android, enable motion and recenter. Both devices need Internet; no Mac relay, tunnel, shared Wi-Fi or separate server process is required. The laptop always renders the scene.
+
+The backend is `api/phone.ts`, a Node HTTP/WebSocket server hosted as a Vercel Function. `server/phone/store.ts` uses Redis pub/sub to exchange packets across Function instances. Redis holds **capability hashes**, an expiring room index, a short-lived hashed-address creation limit and connection leases. It does not save raw pairing capabilities, orientation history, scenarios or exercise results. Rooms expire after two hours; End pairing revokes their leases immediately. Maximum 32 rooms per environment; creation is limited to ten rooms per address per ten minutes.
+
+Configuration:
+
+1. Connect a Redis-compatible store through Vercel Marketplace. This project uses **Upstash for Redis, Free**, Mumbai (`bom1`), with automatic upgrades disabled.
+2. Expose its TCP/TLS `REDIS_URL` to the Function (or use server-only `PHONE_REDIS_URL`). REST-only credentials are insufficient. Never prefix these values with `VITE_` or commit them. Production and preview room namespaces are isolated.
+3. Enable Fluid Compute and deploy with the existing Vite build. `vercel.json` routes `/api/phone/*` to the Function with a 300-second limit. The client reconnects and reannounces readiness; sockets rotate before that limit. A live exercise holds when the link drops and **requires an explicit laptop resume** after reconnecting.
+4. `/api/phone/status` reports availability without exposing credentials. Missing/unavailable Redis produces an actionable error instead of a QR that cannot connect.
+
+WebSockets on Vercel are in beta. Free Redis quotas and Vercel Function/data usage still apply; the free Redis plan is not unlimited and pairing becomes unavailable if its quota is exhausted. The simulator itself remains usable. Local relay/USB fallback remains available below.
+
 ## Wireless on a Mac
 
 ```sh
@@ -25,7 +40,7 @@ Open **http://localhost:4173** on the laptop. Select **Galwan Valley** or **Tolo
 
 The local Delhi-inspired district retains motion-controlled viewing and tagging. Geographic theatre changes retain the room, update its epoch, clear queued navigation, and reset the camera reference for the new site. Physics trace preparation remains on the laptop before its exercise clock can advance. The controller waits for that preparation before accepting scored decisions.
 
-Ctrl+C stops the relay and tunnel. Rebuild after source changes. Restarting the relay invalidates invitations and generates a new tunnel URL; scan the fresh QR. The standalone Vercel deployment does not run this local demo relay.
+Ctrl+C stops the relay and tunnel. Rebuild after source changes. Restarting the relay invalidates invitations and generates a new tunnel URL; scan the fresh QR. The hosted Vercel relay is independent of this local process.
 
 ## USB fallback
 
@@ -49,12 +64,12 @@ Afterwards remove forwarding with `adb reverse --remove tcp:4173` and disconnect
 - **O** observes the displayed aimed/radar-cued track; **1–3** classify the selected observed track. A delivered AudioVolumeUp event is accepted best-effort, but reliable physical volume-button handling requires native Android integration.
 - This is a controller demonstration, not calibrated headset VR or positional tracking. The original local-district handheld renderer remains an opt-in development view at `/phone?view=handheld#pair=…`; its split-eye option is an uncalibrated stereo preview. Use the default controller for geographic theatres.
 - Scene data are synthetic. Esri imagery on terrain is not verified photorealistic 3D-building coverage or surveyed collision geometry.
-- Rooms are in memory, limited to 32, and expire after two hours. The host capability is separate from the bearer invitation and is never included in its QR. Do not share the QR beyond the intended phone. No account or result database is introduced.
+- Local rooms are in memory; cloud rooms use expiring Redis hashes and transient pub/sub. Both are limited to 32 rooms and expire after two hours. The host capability is separate from the bearer invitation and is never included in its QR. Do not share the QR beyond the intended phone. No account or result database is introduced.
 
 ## Troubleshooting
 
 - **Motion unavailable on plain LAN HTTP:** use the HTTPS tunnel or USB-forwarded localhost.
-- **Relay unavailable on the production website:** open the local laptop URL printed by the script.
+- **Relay unavailable on the production website:** verify the server-only Redis connection, Fluid Compute, deployment and provider quota. Retry, or use the local laptop URL printed by the demo script.
 - **Waiting / another phone already joined / expired invitation:** end pairing and scan a fresh QR.
 - **Motion remains waiting:** allow motion sensors in Chrome site settings, retry and recenter. Drag look is available without sensors.
 - **Very steep view:** recenter, then use Site or a laptop camera preset after disconnecting. Phone tilt is bounded; camera translation remains constrained by the existing approximate terrain checks.
@@ -63,6 +78,8 @@ Afterwards remove forwarding with `adb reverse --remove tcp:4173` and disconnect
 
 ## Verification
 
-Run `npm test` and `npm run build`. Phone tests cover malformed commands, room isolation, host authentication, stale/paused/replay decision rejection, heading wrap, recentering, camera rebasing after desktop navigation, bounded tilt and frame-rate-independent easing. Browser checks must include the mountain and valley renderers, remote pan/zoom, held-clock rotation, laptop preview visibility, phone controls, radar/EO agreement and lifecycle cleanup. Physical OnePlus sensor smoothness still needs a handset check.
+Run `npm test` and `npm run build`. Phone tests cover malformed commands, room isolation, host authentication, stale/paused/replay decision rejection, heading wrap, recentering, camera rebasing after desktop navigation, bounded tilt and frame-rate-independent easing. Browser checks must include the mountain and valley renderers, remote pan/zoom, held-clock rotation, laptop preview visibility, phone controls, radar/EO agreement and lifecycle cleanup. Distributed relay tests use a temporary local `redis-server` when available (install with `brew install redis`); these integration checks are explicitly skipped if it is absent. They exercise separate Function instances, room limits, host authentication, reconnect leases, packet ordering, revocation and room isolation. Physical OnePlus sensor smoothness still needs a handset check.
 
 Sources: [MDN orientation events](https://developer.mozilla.org/en-US/docs/Web/API/Device_orientation_events/Detecting_device_orientation), [Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
+
+Hosted references: [Vercel WebSockets](https://vercel.com/docs/functions/websockets), [Redis pub/sub](https://redis.io/docs/latest/develop/pubsub/).

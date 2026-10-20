@@ -9,7 +9,7 @@ Trinetra (त्रिनेत्र, formerly Aeron) is the SIH26247 drone-obs
 - Repository: https://github.com/maindevhoon/sihdrone
 - Production: https://sihdrone.vercel.app
 - Vercel project: `sihdrone`, under `maindevhoons-projects`.
-- The deployed app has no account system or database. Results are stored in the browser. An optional local phone-demo relay keeps pairing rooms in memory only; see `docs/PHONE-DEMO.md`.
+- The app has no account system or results database. Results stay in the browser. Online phone pairing uses Vercel WebSockets and expiring Redis room/connection records; sensor/control packets use pub/sub only. The optional local phone-demo relay keeps rooms in memory; see `docs/PHONE-DEMO.md`.
 - Read `README.md` for implemented behavior. `PLAN.md` is a broader roadmap and contains historical assumptions; do not describe its planned features as completed work.
 
 ## Commands
@@ -58,6 +58,7 @@ node --import tsx scripts/create-contact-models.mjs
 | `src/theatres.ts` | Theatre catalogue (published coordinates), per-terrain camera framing, ground-sample rings |
 | `src/EarthScene.tsx` | Cesium viewer, imagery on 3D terrain or Google 3D tiles, airspace datum sampling, geographic contacts, cleanup |
 | `src/phone/` | QR pairing, primary phone controller, optional district handheld renderer, Cesium/local camera control |
+| `api/phone.ts`, `server/phone/` | Hosted Vercel WebSocket relay, Redis room hashes/leases and transient pub/sub |
 | `scripts/phone-demo.ts`, `scripts/phone/relay.ts` | Opt-in local HTTP/WebSocket demo relay and temporary HTTPS tunnel; USB uses ADB forwarding |
 | `src/Radar.tsx` | Interactive synthetic situation display |
 | `src/radarMath.ts` | Radar projection, trails, and readouts |
@@ -106,7 +107,7 @@ node --import tsx scripts/create-contact-models.mjs
 
 - The laptop owns the exercise clock, scoring and results. A phone decision needs the current scenario epoch, a prepared handset, an arrived track and a running exercise. Preview, paused and replay views must reject scored phone actions.
 - The default phone page is a controller; the laptop renders and compiles frozen traces. Send orientation, navigation and state rather than video. The opt-in district handheld renderer retains shared trace interpolation. Keep geographic framing when acquiring/recentering the controller, and reuse terrain-aware pan/zoom. Hiding/disconnecting a handset holds a live exercise. Reconnect never automatically resumes.
-- Use HTTPS for wireless sensor access or USB-forwarded localhost. Keep the relay on loopback, bound in-memory rooms and payloads, separate host capabilities from QR invitations, and do not persist pairing secrets.
+- Use HTTPS for wireless sensor access or USB-forwarded localhost. Keep the local relay on loopback. Bound cloud/local rooms and payloads; separate host capabilities from QR invitations. Cloud Redis stores only capability hashes and short-lived connection leases (rooms expire after two hours), never raw invitations/host secrets, sensor history or results. Use server-only `REDIS_URL` / `PHONE_REDIS_URL`, never `VITE_` credentials. Cloud instances must coordinate through Redis; do not rely on local memory or resume live exercises after Function reconnection.
 - Phone orientation provides three-axis rotation; acceleration is diagnostic only. Do not describe split-eye preview as calibrated headset VR, promise browser volume-button delivery, or claim positional tracking.
 
 ## Credentials and generated files

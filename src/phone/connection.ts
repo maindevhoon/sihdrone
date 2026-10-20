@@ -10,12 +10,17 @@ export function connectPhone(
     retry: ReturnType<typeof setTimeout> | undefined,
     closed = false;
   let delay = 500;
+  // Reuse this identity across Function rotations without stealing another handset's lease.
+  const client = Array.from(crypto.getRandomValues(new Uint8Array(16)), (n) =>
+    n.toString(16).padStart(2, "0"),
+  ).join("");
   function open() {
     const url = new URL("/api/phone/socket", location.origin);
     url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
     url.search = new URLSearchParams({
       room,
       role,
+      client,
       ...(hostKey ? { key: hostKey } : {}),
     }).toString();
     socket = new WebSocket(url);
@@ -39,7 +44,7 @@ export function connectPhone(
         event.code !== 4004 &&
         event.code !== 4009
       ) {
-        retry = setTimeout(open, delay);
+        retry = setTimeout(open, delay + Math.random() * 250);
         delay = Math.min(delay * 2, 5000);
       }
     };

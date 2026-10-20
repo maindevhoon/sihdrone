@@ -70,7 +70,10 @@ export function usePhoneHost(props: Props) {
       });
       const status = await statusResponse.json();
       if (!statusResponse.ok || !status.available)
-        throw new Error("Relay unavailable");
+        throw new Error(
+          status.error ||
+            "Phone pairing is unavailable. Retry shortly or use npm run phone:wireless on the laptop.",
+        );
       const response = await fetch("/api/phone/rooms", {
         method: "POST",
         signal: AbortSignal.timeout(5000),
@@ -87,10 +90,13 @@ export function usePhoneHost(props: Props) {
       }
       setOrigin(status.publicOrigin || location.origin);
       setRoom(result);
-    } catch {
+    } catch (cause) {
       if (mounted.current)
         setError(
-          "Start the phone demo relay on your laptop: npm run phone:wireless. For USB, use npm run phone:demo. Open the laptop URL it prints, then pair here.",
+          cause instanceof Error &&
+            !["SyntaxError", "TimeoutError", "TypeError"].includes(cause.name)
+            ? cause.message
+            : "Phone pairing is unavailable. Retry, or run npm run phone:wireless on your laptop and open its local URL. USB is available with npm run phone:demo.",
         );
     } finally {
       busy.current = false;
