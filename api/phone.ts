@@ -1,5 +1,5 @@
-import { createCloudRelay } from "../server/phone/relay";
-import { RedisPairingStore } from "../server/phone/store";
+import { createCloudRelay } from "../server/phone/relay.js";
+import { RedisPairingStore } from "../server/phone/store.js";
 
 const url = process.env.PHONE_REDIS_URL || process.env.REDIS_URL;
 // Production and preview rooms never share a namespace; preview deployments are isolated, too.

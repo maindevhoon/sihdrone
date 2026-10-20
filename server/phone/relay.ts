@@ -5,7 +5,7 @@ import {
 } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
-import { validAction, validControl, validPose } from "../../src/phone/protocol";
+import { validAction, validControl, validPose } from "../../src/phone/protocol.js";
 import type { Lease, PairingStore, Role } from "./store";
 
 export function permittedMessage(role: Role, message: unknown): boolean {
