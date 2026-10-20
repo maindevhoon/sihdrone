@@ -66,7 +66,7 @@ export function usePhoneHost(props: Props) {
     setError("");
     try {
       const statusResponse = await fetch("/api/phone/status", {
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(15000),
       });
       const status = await statusResponse.json();
       if (!statusResponse.ok || !status.available)
@@ -76,7 +76,7 @@ export function usePhoneHost(props: Props) {
         );
       const response = await fetch("/api/phone/rooms", {
         method: "POST",
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(15000),
       });
       const result = await response.json();
       if (!response.ok)
@@ -91,13 +91,13 @@ export function usePhoneHost(props: Props) {
       setOrigin(status.publicOrigin || location.origin);
       setRoom(result);
     } catch (cause) {
-      if (mounted.current)
+      if (mounted.current) {
+        const detail =
+          cause instanceof Error ? cause.message : "Connection failed";
         setError(
-          cause instanceof Error &&
-            !["SyntaxError", "TimeoutError", "TypeError"].includes(cause.name)
-            ? cause.message
-            : "Phone pairing is unavailable. Retry, or run npm run phone:wireless on your laptop and open its local URL. USB is available with npm run phone:demo.",
+          `${detail}. Retry online pairing, or run npm run phone:wireless on your laptop and open its local URL. USB is available with npm run phone:demo.`,
         );
+      }
     } finally {
       busy.current = false;
     }
