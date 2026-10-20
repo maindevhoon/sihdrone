@@ -6,16 +6,27 @@ import {
   Plus,
   RotateCcw,
   Smartphone,
-  Move,
   Compass,
   Home,
-  SkipForward,
   Pause,
+  Radio,
+  Check,
+  Tag,
+  Bird,
+  Plane,
+  Layers,
+  Activity,
+  ChevronRight,
 } from "lucide-react";
 import { categories, formatTime, trackLabel } from "../simulation";
 import { theatreById, isGeographic } from "../theatres";
 import { connectPhone } from "./connection";
 import { usePhoneSensors } from "./usePhoneSensors";
+import {
+  controllerTarget,
+  tagConfirmed,
+  type PendingTag,
+} from "./controllerState";
 import type {
   PhoneControl,
   PhoneSnapshot,
@@ -37,6 +48,14 @@ export default function PhoneController() {
     [fresh, setFresh] = useState(false);
   const [rtt, setRtt] = useState<number | null>(null),
     [notice, setNotice] = useState("");
+  const [targetSource, setTargetSource] = useState<"reticle" | "track">(
+    "reticle",
+  );
+  const [requestedTrack, setRequestedTrack] = useState<{
+    epoch: number;
+    id: number;
+  } | null>(null);
+  const [pendingTag, setPendingTag] = useState<PendingTag | null>(null);
   const [mode, setMode] = useState<PadMode>("look"),
     [hidden, setHidden] = useState(document.hidden);
   const sensors = usePhoneSensors(),
@@ -60,17 +79,41 @@ export default function PhoneController() {
     usable &&
     snapshot?.phase === "running" &&
     snapshot.playing &&
-    snapshot.time >= snapshot.scenario.arrival;
-  const candidate = snapshot?.aimedTrack ?? snapshot?.selectedTrack ?? 0;
-  const selected = snapshot?.decisions?.find(
-    (track) => track.id === snapshot.selectedTrack,
-  );
+    snapshot.time >= snapshot.scenario.arrival &&
+    snapshot.time < snapshot.scenario.duration;
+  const selectionWaiting =
+    !!requestedTrack &&
+    requestedTrack.epoch === snapshot?.epoch &&
+    requestedTrack.id !== snapshot.selectedTrack;
+  const candidate = selectionWaiting
+    ? requestedTrack.id
+    : controllerTarget(snapshot, targetSource);
   const candidateDecision = snapshot?.decisions?.find(
     (track) => track.id === candidate,
   );
+  const contact = snapshot?.contacts?.find((track) => track.id === candidate);
+  const tagged =
+    snapshot?.decisions?.filter((track) => track.detection != null).length || 0;
+  const identified =
+    snapshot?.decisions?.filter(
+      (track) => track.detection != null && track.answer,
+    ).length || 0;
+  const canTag = live && candidate !== null && !selectionWaiting && !pendingTag;
+  const phaseLabel =
+    snapshot?.phase === "running"
+      ? "LIVE"
+      : snapshot?.phase === "paused"
+        ? "ON HOLD"
+        : snapshot?.phase === "replay"
+          ? "REPLAY"
+          : "PREVIEW";
+  const bearing =
+    snapshot?.bearing == null
+      ? "—"
+      : String(Math.round(snapshot.bearing) % 360).padStart(3, "0");
   const sendControl = (command: WithoutEpoch<PhoneControl>) => {
     const state = current.current;
-    if (state)
+    if (state && usable)
       channel.current?.send({
         ...command,
         type: "control",
@@ -188,34 +231,96 @@ export default function PhoneController() {
     sendControl({ control: "recenter" });
     setNotice("Reference reset. The laptop keeps its current map position.");
   }
-  function observe() {
-    if (!live || !snapshot) return;
-    channel.current?.send({
-      type: "observe",
-      track: candidate,
-      epoch: snapshot.epoch,
-    });
-    navigator.vibrate?.(25);
-    setNotice(`${trackLabel(candidate)} observation sent`);
+  function chooseTrack(id: number) {
+    if (!usable || !snapshot) return;
+    setTargetSource("track");
+    setRequestedTrack({ epoch: snapshot.epoch, id });
+    sendControl({ control: "select-track", track: id });
   }
-  const actions = useRef({ observe, snapshot, live });
-  actions.current = { observe, snapshot, live };
+  function observe() {
+    if (
+      !canTag ||
+      !snapshot ||
+      candidate === null ||
+      candidateDecision?.detection != null
+    )
+      return;
+    const action = { epoch: snapshot.epoch, track: candidate };
+    channel.current?.send({ type: "observe", ...action });
+    setPendingTag(action);
+    setTargetSource("track");
+    setRequestedTrack({ epoch: snapshot.epoch, id: candidate });
+    navigator.vibrate?.(25);
+    setNotice(`Sending ${trackLabel(candidate)} tag to the laptop…`);
+  }
+  function classify(answer: (typeof categories)[number]) {
+    if (
+      !canTag ||
+      !snapshot ||
+      candidate === null ||
+      candidateDecision?.detection == null
+    )
+      return;
+    const action = { epoch: snapshot.epoch, track: candidate, answer };
+    channel.current?.send({ type: "classify", ...action });
+    setPendingTag(action);
+    setNotice(`Sending ${trackLabel(candidate)} · ${answer}…`);
+  }
+  useEffect(() => {
+    if (!pendingTag || !snapshot) return;
+    if (tagConfirmed(pendingTag, snapshot)) {
+      setNotice(
+        `${trackLabel(pendingTag.track)} · ${pendingTag.answer || "Observation tagged"} · confirmed by laptop`,
+      );
+      setPendingTag(null);
+      navigator.vibrate?.([15, 40, 15]);
+    } else if (
+      snapshot.epoch !== pendingTag.epoch ||
+      !usable ||
+      snapshot.phase !== "running"
+    ) {
+      setNotice("Tag not confirmed. Check the laptop before trying again.");
+      setPendingTag(null);
+    }
+  }, [snapshot, pendingTag, usable]);
+  useEffect(() => {
+    if (!pendingTag) return;
+    const timeout = setTimeout(() => {
+      setPendingTag(null);
+      setNotice(
+        "No confirmation yet. Check the laptop's track register before retrying.",
+      );
+    }, 3000);
+    return () => clearTimeout(timeout);
+  }, [pendingTag]);
+  useEffect(() => {
+    setRequestedTrack(null);
+    setTargetSource("reticle");
+    setNotice("");
+  }, [snapshot?.epoch]);
+  useEffect(() => {
+    if (
+      requestedTrack?.epoch === snapshot?.epoch &&
+      requestedTrack?.id === snapshot?.selectedTrack
+    )
+      setRequestedTrack(null);
+  }, [snapshot?.epoch, snapshot?.selectedTrack, requestedTrack]);
+  const actions = useRef({ observe, classify });
+  actions.current = { observe, classify };
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if (event.repeat) return;
-      const p = actions.current;
-      if (!p.live || !p.snapshot) return;
+      if (
+        event.repeat ||
+        (event.target instanceof HTMLElement &&
+          event.target.closest("input,select,textarea"))
+      )
+        return;
       if (event.key.toLowerCase() === "o" || event.key === "AudioVolumeUp") {
         event.preventDefault();
-        p.observe();
+        actions.current.observe();
       }
       if (["1", "2", "3"].includes(event.key))
-        channel.current?.send({
-          type: "classify",
-          track: p.snapshot.selectedTrack,
-          epoch: p.snapshot.epoch,
-          answer: categories[Number(event.key) - 1],
-        });
+        actions.current.classify(categories[Number(event.key) - 1]);
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -234,284 +339,503 @@ export default function PhoneController() {
   return (
     <main className="phone-controller">
       <header className="controller-header">
-        <div>
-          <span className="phone-eyebrow">TRINETRA · WIRELESS CONTROLLER</span>
-          <h1>{theatre.name}</h1>
-          <p>{theatre.terrainLabel} · laptop display</p>
-        </div>
-        <span className={`phone-status ${usable ? "online" : ""}`}>
-          {!connected
-            ? "Connecting…"
-            : !host
-              ? "Waiting for laptop"
-              : !fresh
-                ? "Link held"
-                : snapshot?.prepared === false
-                  ? "Preparing flight"
-                  : "Connected"}
-          {rtt !== null && <small>{rtt} ms relay</small>}
-        </span>
-      </header>
-      <section className="controller-motion">
-        <div>
-          <Smartphone size={24} />
-          <h2>Move the phone. Watch the laptop.</h2>
-          <p>
-            {sensors.enabled
-              ? "Turn to look left / right. Tilt to look up / down."
-              : "Enable motion for gyro control, or drag the pad to look around."}
-          </p>
-        </div>
-        <div className="controller-primary">
-          <button onClick={() => void sensors.enable()}>
-            {sensors.enabled ? "Retry motion" : "Enable motion"}
-          </button>
-          <button onClick={recenter}>
-            <RotateCcw size={17} />
-            Recenter
-          </button>
-        </div>
-      </section>
-      <section className="controller-pad-section">
-        <div className="controller-pad-heading">
-          <span>
-            {mode === "look" ? "DRAG TO LOOK" : "SWIPE TO PAN · PINCH TO ZOOM"}
+        <div className="controller-brand">
+          <span className="controller-logo">
+            <Radio size={20} />
           </span>
           <div>
-            <button
-              aria-pressed={mode === "look"}
-              onClick={() => {
-                setMode("look");
-                manualPose.current = [0, 0, 0, 1];
-                angles.current = { yaw: 0, pitch: 0 };
-                sendControl({ control: "recenter" });
-              }}
-            >
-              Drag look
-            </button>
-            <button
-              aria-pressed={mode === "pan"}
-              disabled={!map && !sensors.enabled}
-              onClick={() => {
-                setMode("pan");
-                sendControl({ control: "recenter" });
-              }}
-            >
-              Motion / pan
-            </button>
+            <span className="phone-eyebrow">TRINETRA</span>
+            <span className="controller-subbrand">REMOTE OBSERVER</span>
+          </div>
+        </div>
+        <span className={`controller-link ${usable ? "online" : ""}`}>
+          <i />
+          {!connected
+            ? "Connecting"
+            : !host
+              ? "Laptop offline"
+              : snapshot?.prepared === false
+                ? "Preparing"
+                : !usable
+                  ? "Link held"
+                  : "Connected"}
+          <small>{rtt === null ? "—" : `${rtt} ms`}</small>
+        </span>
+      </header>
+      <section className="controller-mission" aria-label="Exercise status">
+        <div className="mission-title">
+          <span className={`controller-phase ${live ? "live" : ""}`}>
+            {phaseLabel}
+          </span>
+          <h1>{theatre.name}</h1>
+          <span className="mission-seed">
+            {snapshot ? `SEED ${snapshot.scenario.seed}` : "AWAITING SESSION"}
+          </span>
+        </div>
+        <div className="controller-metrics">
+          <div>
+            <span>EXERCISE</span>
+            <strong>
+              {snapshot ? formatTime(snapshot.time) : "00:00"}
+              <small>
+                {" "}
+                / {snapshot ? formatTime(snapshot.scenario.duration) : "—"}
+              </small>
+            </strong>
+          </div>
+          <div>
+            <span>TAGGED</span>
+            <strong>
+              {tagged}
+              <small> / {snapshot?.scenario.count ?? "—"}</small>
+            </strong>
+          </div>
+          <div>
+            <span>IDENTIFIED</span>
+            <strong>
+              {identified}
+              <small> tracks</small>
+            </strong>
           </div>
         </div>
         <div
-          className="controller-pad"
-          aria-label="Phone navigation pad"
-          onPointerDown={(event) => {
-            event.currentTarget.setPointerCapture(event.pointerId);
-            points.current.set(event.pointerId, {
-              x: event.clientX,
-              y: event.clientY,
-            });
-            pinch.current = null;
-          }}
-          onPointerMove={(event) => {
-            const old = points.current.get(event.pointerId);
-            if (!old) return;
-            const dx = event.clientX - old.x,
-              dy = event.clientY - old.y;
-            points.current.set(event.pointerId, {
-              x: event.clientX,
-              y: event.clientY,
-            });
-            const fingers = [...points.current.values()];
-            if (fingers.length === 2 && map) {
-              const distance = Math.hypot(
-                fingers[0].x - fingers[1].x,
-                fingers[0].y - fingers[1].y,
-              );
-              if (pinch.current && distance > 4)
-                pending.current.zoom += Math.log(pinch.current / distance);
-              pinch.current = distance;
-            } else if (mode === "look") {
-              angles.current.yaw -= bound(dx, 40) * 0.004;
-              angles.current.pitch = Math.max(
-                -1.25,
-                Math.min(1.25, angles.current.pitch - bound(dy, 40) * 0.004),
-              );
-              manualPose.current = new Quaternion()
-                .setFromEuler(
-                  new Euler(angles.current.pitch, angles.current.yaw, 0, "YXZ"),
-                )
-                .toArray() as Pose;
-            } else if (map) {
-              pending.current.x -= dx * 0.7;
-              pending.current.y -= dy * 0.7;
-            }
-            const now = performance.now(),
-              p = pending.current;
-            if (now - p.at < 40) return;
-            p.at = now;
-            if (p.zoom) {
-              sendControl({ control: "zoom", amount: bound(p.zoom, 0.25) });
-              p.zoom = 0;
-            }
-            if (p.x || p.y) {
-              sendControl({
-                control: "pan",
-                x: bound(p.x, 80),
-                y: bound(p.y, 80),
-              });
-              p.x = 0;
-              p.y = 0;
-            }
-          }}
-          onPointerUp={(event) => {
-            points.current.delete(event.pointerId);
-            pinch.current = null;
-          }}
-          onPointerCancel={(event) => {
-            points.current.delete(event.pointerId);
-            pinch.current = null;
-          }}
+          className="mission-progress"
+          role="progressbar"
+          aria-label="Exercise elapsed"
+          aria-valuemin={0}
+          aria-valuemax={snapshot?.scenario.duration || 1}
+          aria-valuenow={snapshot?.time || 0}
         >
-          <Move size={32} />
-          <span>{snapshot?.bearing?.toString().padStart(3, "0") ?? "—"}°</span>
-          <small>
-            {mode === "look"
-              ? "Drag this pad to turn the laptop camera"
-              : map
-                ? "Swipe to move across the terrain"
-                : "Motion controls the district camera"}
-          </small>
-        </div>
-        <div className="controller-map-buttons">
-          <button
-            disabled={!usable || !map}
-            aria-label="Zoom in map"
-            onClick={() => sendControl({ control: "zoom", amount: -0.18 })}
-          >
-            <Plus size={19} />
-            Zoom in
-          </button>
-          <button
-            disabled={!usable || !map}
-            aria-label="Zoom out map"
-            onClick={() => sendControl({ control: "zoom", amount: 0.18 })}
-          >
-            <Minus size={19} />
-            Zoom out
-          </button>
-          <button
-            disabled={!usable || !map}
-            onClick={() => sendControl({ control: "north" })}
-          >
-            <Compass size={17} />
-            North
-          </button>
-          <button
-            disabled={!usable || !map}
-            onClick={() => sendControl({ control: "home" })}
-          >
-            <Home size={17} />
-            Site
-          </button>
+          <i
+            style={{
+              width: `${snapshot ? Math.min(100, (snapshot.time / snapshot.scenario.duration) * 100) : 0}%`,
+            }}
+          />
         </div>
       </section>
-      <section className="controller-contact">
-        <header>
-          <div>
-            <span className="phone-eyebrow">
-              {snapshot?.aimedTrack != null
-                ? "LAPTOP RETICLE"
-                : "RADAR-CUED TRACK"}
-            </span>
-            <h2>
-              {snapshot ? trackLabel(candidate) : "—"}{" "}
-              <small>
-                {candidateDecision?.detection != null
-                  ? "Observed"
-                  : "Unobserved"}
-              </small>
-            </h2>
+      <div className="controller-workspace">
+        <section className="controller-contact" aria-label="Contact tagging">
+          <div className="controller-section-title">
+            <span className="phone-eyebrow">01 / CONTACT & TAG</span>
+            <span className="synthetic-label">SYNTHETIC</span>
           </div>
-          <span>
-            {snapshot ? formatTime(snapshot.time) : "—"} ·{" "}
-            {snapshot?.phase === "running"
-              ? "LIVE"
-              : snapshot?.phase === "paused"
-                ? "HOLD"
-                : "PREVIEW"}
-          </span>
-        </header>
-        <div className="controller-contact-actions">
-          <button
-            className="controller-observe"
-            disabled={!live}
-            onClick={observe}
+          <div
+            className="controller-target-tabs"
+            aria-label="Tag target source"
           >
-            <Crosshair size={20} />
-            Observe {snapshot ? trackLabel(candidate) : "contact"}
-          </button>
-          <button
-            disabled={!usable}
-            onClick={() => sendControl({ control: "next-track" })}
-          >
-            <SkipForward size={18} />
-            Next track
-          </button>
-          <button
-            disabled={!usable || snapshot?.phase !== "running"}
-            onClick={() => sendControl({ control: "hold" })}
-          >
-            <Pause size={17} />
-            Hold
-          </button>
-        </div>
-        <p className="phone-small">
-          Assessment {snapshot ? trackLabel(snapshot.selectedTrack) : "—"} ·{" "}
-          {selected?.detection != null
-            ? "Observation recorded. Choose a category."
-            : "Observe before classifying. Next track cues the laptop EO/IR feed."}
-        </p>
-        <div className="phone-classify">
-          {categories.map((answer) => (
             <button
-              key={answer}
-              disabled={!live || selected?.detection == null}
-              aria-pressed={selected?.answer === answer}
+              aria-pressed={targetSource === "reticle"}
               onClick={() => {
-                if (snapshot)
-                  channel.current?.send({
-                    type: "classify",
-                    track: snapshot.selectedTrack,
-                    epoch: snapshot.epoch,
-                    answer,
-                  });
+                setTargetSource("reticle");
+                setRequestedTrack(null);
               }}
             >
-              {answer}
+              <Crosshair size={14} />
+              Reticle
             </button>
-          ))}
-        </div>
-      </section>
-      <footer className="controller-footer">
-        <div className="phone-sensors">
-          <span>
-            Orientation{" "}
-            {sensors.display.orientation ? "● receiving" : "○ waiting"}
-          </span>
-          <span>
-            Motion {sensors.display.motion ? "● receiving" : "○ waiting"}
-          </span>
-          <span>
-            Rotation {sensors.display.rotationRate?.toFixed(0) ?? "—"}°/s
-          </span>
-        </div>
-        <p role="status">
+            <button
+              aria-pressed={targetSource === "track"}
+              onClick={() => setTargetSource("track")}
+            >
+              <Radio size={14} />
+              Selected track
+            </button>
+          </div>
+          <header className="controller-target-heading">
+            <div>
+              <span className="phone-eyebrow">
+                {targetSource === "reticle" && snapshot?.aimedTrack != null
+                  ? "UNDER LAPTOP RETICLE"
+                  : "RADAR-CUED CONTACT"}
+              </span>
+              <h2>
+                {candidate === null ? "—" : trackLabel(candidate)}
+                <span
+                  className={
+                    candidateDecision?.detection != null
+                      ? "tag-state tagged"
+                      : "tag-state"
+                  }
+                >
+                  {candidateDecision?.detection != null ? (
+                    <>
+                      <Check size={12} />
+                      Tagged
+                    </>
+                  ) : (
+                    "Untagged"
+                  )}
+                </span>
+              </h2>
+            </div>
+            <span className="target-symbol" aria-hidden="true">
+              <Crosshair size={32} />
+            </span>
+          </header>
+          <dl className="controller-readouts">
+            <div>
+              <dt>RANGE</dt>
+              <dd>
+                {contact ? Math.round(contact.range).toLocaleString() : "—"}
+                <small>m</small>
+              </dd>
+            </div>
+            <div>
+              <dt>BEARING</dt>
+              <dd>
+                {contact
+                  ? String(Math.round(contact.bearing) % 360).padStart(3, "0")
+                  : "—"}
+                <small>°</small>
+              </dd>
+            </div>
+            <div>
+              <dt>REL ALT</dt>
+              <dd>
+                {contact ? Math.round(contact.altitude) : "—"}
+                <small>m</small>
+              </dd>
+            </div>
+            <div>
+              <dt>GROUND SPEED</dt>
+              <dd>
+                {contact ? contact.speed.toFixed(1) : "—"}
+                <small>m/s</small>
+              </dd>
+            </div>
+          </dl>
+          <div className="controller-tag-label">
+            <span>IDENTITY TAG</span>
+            <span>{candidateDecision?.answer || "Unclassified"}</span>
+          </div>
+          <div className="controller-category-tags">
+            {categories.map((answer, index) => {
+              const Icon = [Plane, Layers, Bird][index];
+              return (
+                <button
+                  key={answer}
+                  disabled={!canTag || candidateDecision?.detection == null}
+                  aria-pressed={candidateDecision?.answer === answer}
+                  onClick={() => classify(answer)}
+                >
+                  <Icon size={18} />
+                  <span>{answer}</span>
+                  {candidateDecision?.answer === answer && <Check size={12} />}
+                </button>
+              );
+            })}
+          </div>
+          <p className="controller-target-help">
+            {selectionWaiting
+              ? "Selecting this track on the laptop…"
+              : !usable
+                ? "Waiting for a fresh laptop connection."
+                : snapshot?.prepared === false
+                  ? "Preparing the laptop's flight traces."
+                  : snapshot?.phase === "paused"
+                    ? "Exercise held. Resume on the laptop to tag."
+                    : snapshot?.phase === "replay"
+                      ? "Replay is read-only. Tags cannot change results."
+                      : snapshot?.phase === "preview"
+                        ? "Explore freely. Start the exercise on the laptop to tag."
+                        : !live
+                          ? `Contacts arrive at ${formatTime(snapshot?.scenario.arrival || 0)}.`
+                          : candidateDecision?.detection != null
+                            ? `Tagged at ${formatTime(candidateDecision.detection)}. Choose an identity above.`
+                            : "Tag the contact, then choose its identity."}
+          </p>
+          <div className="controller-tracks-title">
+            <span>TRACK REGISTER</span>
+            <span>{snapshot?.contacts?.length ?? 0} returns</span>
+          </div>
+          <div
+            className="controller-track-list"
+            role="group"
+            aria-label="Choose a contact"
+          >
+            {Array.from({ length: snapshot?.scenario.count || 0 }, (_, id) => {
+              const decision = snapshot?.decisions?.find(
+                (track) => track.id === id,
+              );
+              return (
+                <button
+                  key={id}
+                  disabled={!usable || !!pendingTag}
+                  aria-label={`Select ${trackLabel(id)}, ${decision?.answer || (decision?.detection != null ? "tagged" : "untagged")}`}
+                  aria-pressed={candidate === id}
+                  className={decision?.detection != null ? "is-tagged" : ""}
+                  onClick={() => chooseTrack(id)}
+                >
+                  {decision?.detection != null ? <Check size={11} /> : <i />}
+                  {trackLabel(id)}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+        <section
+          className="controller-pad-section"
+          aria-label="Camera controls"
+        >
+          <div className="controller-section-title">
+            <span className="phone-eyebrow">02 / CAMERA CONTROL</span>
+            <span className="camera-heading">HDG {bearing}°</span>
+          </div>
+          <div className="controller-motion">
+            <Smartphone size={19} />
+            <div>
+              <strong>
+                {sensors.enabled && sensors.display.orientation
+                  ? "Gyro active"
+                  : "Touch control"}
+              </strong>
+              <span>
+                {sensors.enabled
+                  ? "Turn & tilt to aim the laptop"
+                  : "Enable your phone's motion sensors"}
+              </span>
+            </div>
+            <button onClick={() => void sensors.enable()}>
+              {sensors.enabled ? "Retry gyro" : "Enable gyro"}
+            </button>
+          </div>
+          <div className="controller-pad-heading">
+            <div>
+              <button
+                aria-pressed={mode === "look"}
+                onClick={() => {
+                  setMode("look");
+                  manualPose.current = [0, 0, 0, 1];
+                  angles.current = { yaw: 0, pitch: 0 };
+                  sendControl({ control: "recenter" });
+                }}
+              >
+                Drag to look
+              </button>
+              <button
+                aria-pressed={mode === "pan"}
+                disabled={!map && !sensors.enabled}
+                onClick={() => {
+                  setMode("pan");
+                  sendControl({ control: "recenter" });
+                }}
+              >
+                Swipe to pan
+              </button>
+            </div>
+            <button
+              className="controller-recenter"
+              onClick={recenter}
+              aria-label="Recenter phone"
+            >
+              <RotateCcw size={15} />
+            </button>
+          </div>
+          <div
+            className="controller-pad"
+            aria-label="Phone navigation pad"
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              points.current.set(event.pointerId, {
+                x: event.clientX,
+                y: event.clientY,
+              });
+              pinch.current = null;
+            }}
+            onPointerMove={(event) => {
+              const old = points.current.get(event.pointerId);
+              if (!old) return;
+              const dx = event.clientX - old.x,
+                dy = event.clientY - old.y;
+              points.current.set(event.pointerId, {
+                x: event.clientX,
+                y: event.clientY,
+              });
+              const fingers = [...points.current.values()];
+              if (fingers.length === 2 && map) {
+                const distance = Math.hypot(
+                  fingers[0].x - fingers[1].x,
+                  fingers[0].y - fingers[1].y,
+                );
+                if (pinch.current && distance > 4)
+                  pending.current.zoom += Math.log(pinch.current / distance);
+                pinch.current = distance;
+              } else if (mode === "look") {
+                angles.current.yaw -= bound(dx, 40) * 0.004;
+                angles.current.pitch = Math.max(
+                  -1.25,
+                  Math.min(1.25, angles.current.pitch - bound(dy, 40) * 0.004),
+                );
+                manualPose.current = new Quaternion()
+                  .setFromEuler(
+                    new Euler(
+                      angles.current.pitch,
+                      angles.current.yaw,
+                      0,
+                      "YXZ",
+                    ),
+                  )
+                  .toArray() as Pose;
+              } else if (map) {
+                pending.current.x -= dx * 0.7;
+                pending.current.y -= dy * 0.7;
+              }
+              const now = performance.now(),
+                p = pending.current;
+              if (now - p.at < 40) return;
+              p.at = now;
+              if (p.zoom) {
+                sendControl({ control: "zoom", amount: bound(p.zoom, 0.25) });
+                p.zoom = 0;
+              }
+              if (p.x || p.y) {
+                sendControl({
+                  control: "pan",
+                  x: bound(p.x, 80),
+                  y: bound(p.y, 80),
+                });
+                p.x = 0;
+                p.y = 0;
+              }
+            }}
+            onPointerUp={(event) => {
+              points.current.delete(event.pointerId);
+              pinch.current = null;
+            }}
+            onPointerCancel={(event) => {
+              points.current.delete(event.pointerId);
+              pinch.current = null;
+            }}
+          >
+            <div className="pad-reticle" aria-hidden="true">
+              <i />
+              <i />
+              <Compass size={24} />
+            </div>
+            <span>
+              {bearing}
+              <em>°</em>
+            </span>
+            <small>
+              {mode === "look"
+                ? "Drag this pad to turn the laptop camera"
+                : map
+                  ? "Swipe to move across the terrain"
+                  : "Motion controls the district camera"}
+            </small>
+          </div>
+          <div className="controller-map-buttons">
+            <button
+              disabled={!usable || !map}
+              aria-label="Zoom in map"
+              onClick={() => sendControl({ control: "zoom", amount: -0.18 })}
+            >
+              <Plus size={17} />
+              Zoom in
+            </button>
+            <button
+              disabled={!usable || !map}
+              aria-label="Zoom out map"
+              onClick={() => sendControl({ control: "zoom", amount: 0.18 })}
+            >
+              <Minus size={17} />
+              Zoom out
+            </button>
+            <button
+              disabled={!usable || !map}
+              onClick={() => sendControl({ control: "north" })}
+            >
+              <Compass size={15} />
+              North
+            </button>
+            <button
+              disabled={!usable || !map}
+              onClick={() => sendControl({ control: "home" })}
+            >
+              <Home size={15} />
+              Site
+            </button>
+          </div>
+          <details className="controller-diagnostics">
+            <summary>
+              <Activity size={13} />
+              Sensors & gestures
+              <ChevronRight size={13} />
+            </summary>
+            <p>
+              Turn / tilt: look with gyro. Drag: look with touch. Swipe in pan
+              mode: move across terrain. Pinch: zoom. Recenter: reset your phone
+              reference.
+            </p>
+            <dl>
+              <div>
+                <dt>Orientation</dt>
+                <dd>{sensors.display.orientation ? "Receiving" : "Waiting"}</dd>
+              </div>
+              <div>
+                <dt>Motion</dt>
+                <dd>{sensors.display.motion ? "Receiving" : "Waiting"}</dd>
+              </div>
+              <div>
+                <dt>Rotation rate</dt>
+                <dd>{sensors.display.rotationRate?.toFixed(0) ?? "—"} °/s</dd>
+              </div>
+              <div>
+                <dt>Acceleration</dt>
+                <dd>{sensors.display.acceleration?.toFixed(1) ?? "—"} m/s²</dd>
+              </div>
+            </dl>
+            <p>
+              Acceleration is diagnostic only. Volume-up tags only when Chrome
+              delivers the key; touch controls are reliable.
+            </p>
+          </details>
+        </section>
+      </div>
+      <div className="controller-feedback" role="status" aria-live="polite">
+        <span className={pendingTag ? "receipt-pending" : ""}>
           {sensors.error ||
             notice ||
-            "The laptop preview stays visible while paired, including on hold. Start / resume the exercise on the laptop."}
-        </p>
-        <small>{snapshot?.status}</small>
+            "Laptop is the display. Your phone controls the view and tags contacts."}
+        </span>
+      </div>
+      <footer className="controller-dock">
+        <button
+          className="controller-tag-button"
+          disabled={!canTag || candidateDecision?.detection != null}
+          onClick={observe}
+        >
+          {candidateDecision?.detection != null && !pendingTag ? (
+            <Check size={20} />
+          ) : (
+            <Tag size={20} />
+          )}
+          <span>
+            {pendingTag
+              ? `Sending ${trackLabel(pendingTag.track)}…`
+              : candidateDecision?.detection != null
+                ? `${candidate === null ? "Contact" : trackLabel(candidate)} tagged`
+                : `Tag ${candidate === null ? "contact" : trackLabel(candidate)}`}
+            <small>
+              {candidateDecision?.detection != null
+                ? "Observation recorded by laptop"
+                : "Record an observation"}
+            </small>
+          </span>
+        </button>
+        <button
+          className="controller-hold-button"
+          disabled={!usable || snapshot?.phase !== "running"}
+          onClick={() => sendControl({ control: "hold" })}
+        >
+          <Pause size={17} />
+          <span>Hold</span>
+        </button>
       </footer>
+      <p className="controller-provenance">
+        Synthetic training returns · altitude relative to observer · results
+        saved on laptop
+      </p>
     </main>
   );
 }

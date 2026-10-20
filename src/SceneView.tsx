@@ -40,10 +40,6 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
   const [aimedTrack,setAimedTrack]=useState<number|null>(null);
   const [bearing,setBearing]=useState(0);
   const [earthStatus,setEarthStatus]=useState('Loading satellite imagery and 3D terrain…');
-  const phone=usePhoneHost({scenario,time,phase,theatre:theatre.id,prepared:preparation.ready,aimedTrack,bearing,status:isGeographic(theatre)?earthStatus:'Local training district',onConnected:()=>{if(phase==='preview'&&!previewPlaying)onTogglePreview?.();},onControl:control=>{if(control.control==='next-track')cue((track+1)%scenario.count);},playing:phase==='running'||(phase==='preview'&&previewPlaying)||(phase==='replay'&&replayPlaying),decisions,selectedTrack:selectedTrack??0,onHold:()=>onPause?.(),onAction:action=>{
-    if(action.type==='observe')inspect(action.track);
-    else {setTrack(action.track);onPhoneClassify?.(action.answer,action.track);}
-  }});
   const world=isGeographic(theatre)?'earth':'training';
   useEffect(()=>{setAimedTrack(null);},[theatre,scenario]);
   const [ground,setGround]=useState<number|null>(null);
@@ -52,6 +48,10 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
   const observerRef=useRef(observer);observerRef.current=observer;
   const updateObserver=useCallback((next:Position)=>setEarthObserver(previous=>next.some((value,i)=>Math.abs(value-previous[i])>.001)?next:previous),[]);
   useEffect(()=>{setGround(null);setEarthObserver(DEFAULT_RADAR_OBSERVER);},[theatre]);
+  const phone=usePhoneHost({scenario,time,phase,observer,metresPerUnit:scenario.version===4?1:world==='earth'?8:1,theatre:theatre.id,prepared:preparation.ready,aimedTrack,bearing,status:isGeographic(theatre)?earthStatus:'Local training district',onConnected:()=>{if(phase==='preview'&&!previewPlaying)onTogglePreview?.();},onControl:control=>{if(control.control==='next-track')cue((track+1)%scenario.count);else if(control.control==='select-track'&&control.track<scenario.count)cue(control.track);},playing:phase==='running'||(phase==='preview'&&previewPlaying)||(phase==='replay'&&replayPlaying),decisions,selectedTrack:selectedTrack??0,onHold:()=>onPause?.(),onAction:action=>{
+    if(action.type==='observe')inspect(action.track);
+    else {setTrack(action.track);onPhoneClassify?.(action.answer,action.track);}
+  }});
   const [labels,setLabels]=useState(true);
   const [earthInput,setEarthInput]=useState<NavigationInput>(()=>/Mac|iPad|iPhone/.test(navigator.platform)?'trackpad':'mouse');
   const [quality,setQuality]=useState<'balanced'|'high'>('balanced');

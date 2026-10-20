@@ -1,6 +1,13 @@
 import type { Category, Scenario, TrackDecision } from "../simulation";
 
 export type Pose = [number, number, number, number];
+export type PhoneContact = {
+  id: number;
+  range: number;
+  bearing: number;
+  altitude: number;
+  speed: number;
+};
 export type PhoneSnapshot = {
   scenario: Scenario;
   epoch: number;
@@ -14,6 +21,7 @@ export type PhoneSnapshot = {
   aimedTrack?: number | null;
   bearing?: number;
   status?: string;
+  contacts?: PhoneContact[];
 };
 export type PhoneAction =
   | { type: "observe"; track: number; epoch: number }
@@ -27,6 +35,7 @@ export type PhoneTelemetry = {
 };
 export type PhoneControl = { type: "control"; epoch: number } & (
   | { control: "recenter" | "next-track" | "home" | "north" | "hold" }
+  | { control: "select-track"; track: number }
   | { control: "zoom"; amount: number }
   | { control: "pan"; x: number; y: number }
 );
@@ -41,6 +50,8 @@ export function validControl(value: unknown): value is PhoneControl {
     )
   )
     return true;
+  if (m.control === "select-track")
+    return Number.isSafeInteger(m.track) && (m.track as number) >= 0;
   if (m.control === "zoom")
     return (
       typeof m.amount === "number" &&

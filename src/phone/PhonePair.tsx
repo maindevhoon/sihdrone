@@ -13,7 +13,8 @@ import {
   type Pose,
   type WireMessage,
 } from "./protocol";
-import type { Scenario, TrackDecision } from "../simulation";
+import { phoneContacts } from "./hostTelemetry";
+import type { Position, Scenario, TrackDecision } from "../simulation";
 
 type Props = {
   scenario: Scenario;
@@ -27,6 +28,8 @@ type Props = {
   aimedTrack?: number | null;
   bearing?: number;
   status?: string;
+  observer?: Position;
+  metresPerUnit?: number;
   onConnected?: () => void;
   onControl?: (control: PhoneControl) => void;
   onHold: () => void;
@@ -137,6 +140,13 @@ export function usePhoneHost(props: Props) {
         aimedTrack: p.aimedTrack,
         bearing: p.bearing,
         status: p.status,
+        contacts: phoneContacts(
+          p.scenario,
+          p.time.current,
+          p.prepared !== false,
+          p.metresPerUnit,
+          p.observer,
+        ),
       };
     };
     const receive = (message: WireMessage) => {
@@ -172,7 +182,10 @@ export function usePhoneHost(props: Props) {
           pose.current = [0, 0, 0, 1];
           controls.current.revision++;
         } else if (message.control === "hold") latest.current.onHold();
-        else if (message.control === "next-track")
+        else if (
+          message.control === "next-track" ||
+          message.control === "select-track"
+        )
           latest.current.onControl?.(message);
         else if (controls.current.queue.length < 32)
           controls.current.queue.push(message);
@@ -361,10 +374,10 @@ export function PhonePairDialog({
               <ol>
                 <li>Open the QR link in Chrome on your phone.</li>
                 <li>
-                  Tap <b>Enable motion</b> and face the screen forward.
+                  Tap <b>Enable gyro</b> and face the screen forward.
                 </li>
                 <li>
-                  Recenter, look at a contact and tap <b>Observe</b>.
+                  Recenter, look at a contact and tap <b>Tag contact</b>.
                 </li>
               </ol>
               <p className="phone-small">
