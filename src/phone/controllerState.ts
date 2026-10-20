@@ -28,3 +28,16 @@ export function controllerTarget(
     ? id
     : null;
 }
+
+/** Advance in numbered order, wrap once, and never return an already observed track. */
+export function nextUntaggedTrack(
+  state: PhoneSnapshot,
+  after: number,
+): number | null {
+  for (let offset = 1; offset <= state.scenario.count; offset++) {
+    const id = (after + offset) % state.scenario.count;
+    if (state.decisions?.find((track) => track.id === id)?.detection == null)
+      return id;
+  }
+  return null;
+}

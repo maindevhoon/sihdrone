@@ -50,7 +50,7 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
   useEffect(()=>{setGround(null);setEarthObserver(DEFAULT_RADAR_OBSERVER);},[theatre]);
   const phone=usePhoneHost({scenario,time,phase,observer,metresPerUnit:scenario.version===4?1:world==='earth'?8:1,theatre:theatre.id,prepared:preparation.ready,aimedTrack,bearing,status:isGeographic(theatre)?earthStatus:'Local training district',onConnected:()=>{if(phase==='preview'&&!previewPlaying)onTogglePreview?.();},onControl:control=>{if(control.control==='next-track')cue((track+1)%scenario.count);else if(control.control==='select-track'&&control.track<scenario.count)cue(control.track);},playing:phase==='running'||(phase==='preview'&&previewPlaying)||(phase==='replay'&&replayPlaying),decisions,selectedTrack:selectedTrack??0,onHold:()=>onPause?.(),onAction:action=>{
     if(action.type==='observe')inspect(action.track);
-    else {setTrack(action.track);onPhoneClassify?.(action.answer,action.track);}
+    else onPhoneClassify?.(action.answer,action.track);
   }});
   const [labels,setLabels]=useState(true);
   const [earthInput,setEarthInput]=useState<NavigationInput>(()=>/Mac|iPad|iPhone/.test(navigator.platform)?'trackpad':'mouse');
@@ -173,6 +173,6 @@ export default function SceneView({scenario,time,displayTime,selected,phase,came
     <div className="scene-bottom"><span className="scene-hint">{world==='earth'?(earthInput==='trackpad'?'Click-drag to pan · Two-finger scroll to orbit · Pinch to zoom':'Drag to pan · Scroll to zoom · Right-drag to orbit'):'Drag to orbit · Scroll to zoom · Click an aircraft to observe'}</span><label className="quality-control"><span>GFX</span><select aria-label="Graphics quality" value={quality} onChange={e=>setQuality(e.target.value as 'balanced'|'high')}><option value="balanced">Balanced</option><option value="high">High</option></select></label></div>
     <PhonePairDialog phone={phone}/>
     {phone.connected&&<div className="phone-host-badge">PHONE CONTROLLER · {phone.rtt===null?'Connected':`${phone.rtt} ms relay`}<button onClick={phone.open}>Manage</button><button onClick={phone.end}>Disconnect</button></div>}
-    {phase==='paused'&&<div className={`pause-overlay ${phone.connected?'phone-held-banner':''}`}><Pause size={26}/><h3>Exercise on hold</h3><p>Contact motion, radar sweep and the exercise clock are frozen.</p><button onClick={onResume}><Play size={15}/>Resume</button></div>}
+    {phase==='paused'&&<div className={`pause-overlay ${phone.connected?'phone-held-banner':''}`}><Pause size={26}/><h3>Exercise on hold</h3><p>{phone.holdReason||"Contact motion, radar sweep and the exercise clock are frozen."}</p><button onClick={onResume}><Play size={15}/>Resume</button></div>}
   </div>;
 }

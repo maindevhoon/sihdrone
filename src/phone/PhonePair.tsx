@@ -13,6 +13,7 @@ import {
   type Pose,
   type WireMessage,
 } from "./protocol";
+import { PhoneSignal } from "./reliability";
 import { phoneContacts } from "./hostTelemetry";
 import type { Position, Scenario, TrackDecision } from "../simulation";
 
@@ -32,7 +33,7 @@ type Props = {
   metresPerUnit?: number;
   onConnected?: () => void;
   onControl?: (control: PhoneControl) => void;
-  onHold: () => void;
+  onHold: (reason?: string) => void;
   onAction: (action: PhoneAction) => void;
 };
 type Room = { room: string; key: string };
@@ -48,6 +49,7 @@ export function usePhoneHost(props: Props) {
   const [rtt, setRtt] = useState<number | null>(null);
   const pose = useRef<Pose>([0, 0, 0, 1]);
   const controls = useRef<PhoneControls>({ revision: 0, queue: [] });
+  const holdReason = useRef<string | undefined>(undefined);
   const busy = useRef(false),
     mounted = useRef(true);
   const end = () => {
@@ -109,14 +111,22 @@ export function usePhoneHost(props: Props) {
     if (!room) return;
     let ready = false,
       peer = false,
-      socketOpen = false,
-      lastSeen = 0;
+      socketOpen = false;
+    const signal = new PhoneSignal();
+    const hold = (reason: string) => {
+      holdReason.current = reason;
+      latest.current.onHold(reason);
+    };
     let epoch = 0,
       previous: Scenario | undefined,
       previousTheatre: string | undefined,
       sent: Scenario | undefined;
+    let previousPhase = latest.current.phase;
     const snapshot = (): PhoneSnapshot => {
       const p = latest.current;
+      if (previousPhase === "paused" && p.phase !== "paused")
+        holdReason.current = undefined;
+      previousPhase = p.phase;
       if (previous !== p.scenario || previousTheatre !== p.theatre) {
         previousTheatre = p.theatre;
         sent = undefined;
@@ -140,6 +150,7 @@ export function usePhoneHost(props: Props) {
         aimedTrack: p.aimedTrack,
         bearing: p.bearing,
         status: p.status,
+        holdReason: p.phase === "paused" ? holdReason.current : undefined,
         contacts: phoneContacts(
           p.scenario,
           p.time.current,
@@ -152,36 +163,39 @@ export function usePhoneHost(props: Props) {
     const receive = (message: WireMessage) => {
       if (message.type === "peer") {
         peer = message.connected;
-        lastSeen = performance.now();
+        signal.receive(performance.now());
         sent = undefined;
         setConnected(peer);
         ready = false;
         setTracking(false);
-        if (!peer) latest.current.onHold();
+        if (!peer)
+          hold("Phone disconnected. Reconnect it, then resume on the laptop.");
         else {
           setDialog(false);
           latest.current.onConnected?.();
         }
       } else if (message.type === "pose" && validPose(message.pose)) {
         pose.current = message.pose;
-        lastSeen = performance.now();
+        signal.receive(performance.now());
         if (ready) setTracking(true);
       } else if (
         message.type === "ready" &&
         message.epoch === snapshot().epoch
       ) {
         ready = true;
-        lastSeen = performance.now();
+        signal.receive(performance.now());
       } else if (
         validControl(message) &&
         peer &&
         ready &&
         message.epoch === snapshot().epoch
       ) {
+        signal.receive(performance.now());
         if (message.control === "recenter") {
           pose.current = [0, 0, 0, 1];
           controls.current.revision++;
-        } else if (message.control === "hold") latest.current.onHold();
+        } else if (message.control === "hold")
+          hold("Hold requested on the phone.");
         else if (
           message.control === "next-track" ||
           message.control === "select-track"
@@ -190,14 +204,16 @@ export function usePhoneHost(props: Props) {
         else if (controls.current.queue.length < 32)
           controls.current.queue.push(message);
       } else if (message.type === "hold") {
-        latest.current.onHold();
+        hold(
+          "Phone browser was hidden. Return to the controller, then resume on the laptop.",
+        );
       } else if (message.type === "pong")
         setRtt(Math.round(performance.now() - message.at));
       else if (
         validAction(message) &&
         acceptsAction(message, snapshot(), ready) &&
         peer &&
-        performance.now() - lastSeen < 1500
+        signal.recent(performance.now())
       )
         latest.current.onAction(message);
     };
@@ -213,7 +229,9 @@ export function usePhoneHost(props: Props) {
           setTracking(false);
           ready = false;
           peer = false;
-          latest.current.onHold();
+          hold(
+            "Phone relay connection interrupted. Reconnect, then resume on the laptop.",
+          );
         }
       },
     );
@@ -227,10 +245,12 @@ export function usePhoneHost(props: Props) {
         const { scenario: _scenario, ...tick } = state;
         connection.send({ type: "tick", state: tick });
       }
-      if (ready && performance.now() - lastSeen > 1500) {
+      if (ready && signal.shouldHold(performance.now())) {
         ready = false;
         setTracking(false);
-        latest.current.onHold();
+        hold(
+          "Phone signal timed out. Check the connection, then resume on the laptop.",
+        );
       }
     }, 100);
     return () => {
@@ -259,6 +279,7 @@ export function usePhoneHost(props: Props) {
     pose,
     controls,
     rtt,
+    holdReason: holdReason.current,
   };
 }
 export function PhonePairDialog({

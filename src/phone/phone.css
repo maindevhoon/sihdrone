@@ -1134,8 +1134,7 @@
   backdrop-filter: none;
   align-items: flex-start;
 }
-.scene.phone-paired .phone-held-banner > svg,
-.scene.phone-paired .phone-held-banner > p {
+.scene.phone-paired .phone-held-banner > svg {
   display: none;
 }
 .scene.phone-paired .phone-held-banner h3 {
@@ -1170,7 +1169,6 @@
     bottom: 145px;
     max-width: 190px;
   }
-
 }
 /* Keep connection / hold status clear of EO controls and provider attribution. */
 .scene.phone-paired .phone-host-badge {
@@ -1197,4 +1195,16 @@
     right: 8px;
     transform: none;
   }
+}
+
+.phone-controller .controller-auto-next {
+  min-height: 32px;
+  padding: 6px 8px;
+  font: 9px var(--mono, monospace);
+}
+
+.scene.phone-paired .phone-held-banner > p {
+  margin: 3px 0;
+  font-size: 10px;
+  line-height: 1.5;
 }

@@ -20,11 +20,13 @@ import {
 } from "lucide-react";
 import { categories, formatTime, trackLabel } from "../simulation";
 import { theatreById, isGeographic } from "../theatres";
+import { PHONE_FRESH_MS } from "./reliability";
 import { connectPhone } from "./connection";
 import { usePhoneSensors } from "./usePhoneSensors";
 import {
   controllerTarget,
   tagConfirmed,
+  nextUntaggedTrack,
   type PendingTag,
 } from "./controllerState";
 import type {
@@ -55,6 +57,8 @@ export default function PhoneController() {
     epoch: number;
     id: number;
   } | null>(null);
+  const [autoNext, setAutoNext] = useState(true);
+  const [assessmentTrack, setAssessmentTrack] = useState<number | null>(null);
   const [pendingTag, setPendingTag] = useState<PendingTag | null>(null);
   const [mode, setMode] = useState<PadMode>("look"),
     [hidden, setHidden] = useState(document.hidden);
@@ -91,6 +95,10 @@ export default function PhoneController() {
   const candidateDecision = snapshot?.decisions?.find(
     (track) => track.id === candidate,
   );
+  const assessmentId = assessmentTrack ?? candidate;
+  const assessmentDecision = snapshot?.decisions?.find(
+    (track) => track.id === assessmentId,
+  );
   const contact = snapshot?.contacts?.find((track) => track.id === candidate);
   const tagged =
     snapshot?.decisions?.filter((track) => track.detection != null).length || 0;
@@ -99,6 +107,11 @@ export default function PhoneController() {
       (track) => track.detection != null && track.answer,
     ).length || 0;
   const canTag = live && candidate !== null && !selectionWaiting && !pendingTag;
+  const canClassify =
+    live &&
+    assessmentId !== null &&
+    assessmentDecision?.detection != null &&
+    !pendingTag;
   const phaseLabel =
     snapshot?.phase === "running"
       ? "LIVE"
@@ -164,7 +177,7 @@ export default function PhoneController() {
               : latestSensors.current.pose.current,
           telemetry: latestSensors.current.telemetry.current,
         });
-      setFresh(performance.now() - received.current < 1200);
+      setFresh(performance.now() - received.current < PHONE_FRESH_MS);
     }, 50);
     const visibility = () => {
       setHidden(document.hidden);
@@ -194,15 +207,6 @@ export default function PhoneController() {
     return () => clearInterval(interval);
   }, [snapshot?.epoch, snapshot?.prepared, connected, host, hidden]);
   useEffect(() => {
-    if (sensors.enabled) {
-      setMode("pan");
-      controlRef.current({ control: "recenter" });
-    }
-  }, [sensors.enabled]);
-  useEffect(() => {
-    controlRef.current({ control: "recenter" });
-  }, [sensors.display.screen]);
-  useEffect(() => {
     if (!connected) return;
     let cancelled = false,
       lock: WakeLockSentinel | undefined;
@@ -224,6 +228,12 @@ export default function PhoneController() {
       void lock?.release();
     };
   }, [connected]);
+  async function enableGyro() {
+    if (await sensors.enable()) {
+      setMode("pan");
+      if (mode !== "pan") sendControl({ control: "recenter" });
+    }
+  }
   function recenter() {
     sensors.recenter();
     manualPose.current = [0, 0, 0, 1];
@@ -235,6 +245,8 @@ export default function PhoneController() {
     if (!usable || !snapshot) return;
     setTargetSource("track");
     setRequestedTrack({ epoch: snapshot.epoch, id });
+    if (snapshot.decisions?.find((track) => track.id === id)?.detection != null)
+      setAssessmentTrack(id);
     sendControl({ control: "select-track", track: id });
   }
   function observe() {
@@ -255,16 +267,16 @@ export default function PhoneController() {
   }
   function classify(answer: (typeof categories)[number]) {
     if (
-      !canTag ||
+      !canClassify ||
       !snapshot ||
-      candidate === null ||
-      candidateDecision?.detection == null
+      assessmentId === null ||
+      assessmentDecision?.detection == null
     )
       return;
-    const action = { epoch: snapshot.epoch, track: candidate, answer };
+    const action = { epoch: snapshot.epoch, track: assessmentId, answer };
     channel.current?.send({ type: "classify", ...action });
     setPendingTag(action);
-    setNotice(`Sending ${trackLabel(candidate)} · ${answer}…`);
+    setNotice(`Sending ${trackLabel(assessmentId)} · ${answer}…`);
   }
   useEffect(() => {
     if (!pendingTag || !snapshot) return;
@@ -272,6 +284,26 @@ export default function PhoneController() {
       setNotice(
         `${trackLabel(pendingTag.track)} · ${pendingTag.answer || "Observation tagged"} · confirmed by laptop`,
       );
+      if (pendingTag.answer === undefined) {
+        setAssessmentTrack(pendingTag.track);
+        const next =
+          autoNext && snapshot.phase === "running" && snapshot.playing
+            ? nextUntaggedTrack(snapshot, pendingTag.track)
+            : null;
+        if (next !== null) {
+          chooseTrack(next);
+          setNotice(
+            `${trackLabel(pendingTag.track)} tagged · now cueing ${trackLabel(next)}. Identity controls below still apply to ${trackLabel(pendingTag.track)}.`,
+          );
+        } else if (
+          autoNext &&
+          nextUntaggedTrack(snapshot, pendingTag.track) === null
+        ) {
+          setNotice(
+            `All ${snapshot.scenario.count} contacts tagged. You can still finish their identity labels.`,
+          );
+        }
+      }
       setPendingTag(null);
       navigator.vibrate?.([15, 40, 15]);
     } else if (
@@ -282,7 +314,7 @@ export default function PhoneController() {
       setNotice("Tag not confirmed. Check the laptop before trying again.");
       setPendingTag(null);
     }
-  }, [snapshot, pendingTag, usable]);
+  }, [snapshot, pendingTag, usable, autoNext]);
   useEffect(() => {
     if (!pendingTag) return;
     const timeout = setTimeout(() => {
@@ -296,6 +328,7 @@ export default function PhoneController() {
   useEffect(() => {
     setRequestedTrack(null);
     setTargetSource("reticle");
+    setAssessmentTrack(null);
     setNotice("");
   }, [snapshot?.epoch]);
   useEffect(() => {
@@ -357,7 +390,7 @@ export default function PhoneController() {
               : snapshot?.prepared === false
                 ? "Preparing"
                 : !usable
-                  ? "Link held"
+                  ? "Syncing laptop"
                   : "Connected"}
           <small>{rtt === null ? "—" : `${rtt} ms`}</small>
         </span>
@@ -505,8 +538,11 @@ export default function PhoneController() {
             </div>
           </dl>
           <div className="controller-tag-label">
-            <span>IDENTITY TAG</span>
-            <span>{candidateDecision?.answer || "Unclassified"}</span>
+            <span>
+              IDENTITY ·{" "}
+              {assessmentId === null ? "—" : trackLabel(assessmentId)}
+            </span>
+            <span>{assessmentDecision?.answer || "Unclassified"}</span>
           </div>
           <div className="controller-category-tags">
             {categories.map((answer, index) => {
@@ -514,13 +550,13 @@ export default function PhoneController() {
               return (
                 <button
                   key={answer}
-                  disabled={!canTag || candidateDecision?.detection == null}
-                  aria-pressed={candidateDecision?.answer === answer}
+                  disabled={!canClassify}
+                  aria-pressed={assessmentDecision?.answer === answer}
                   onClick={() => classify(answer)}
                 >
                   <Icon size={18} />
                   <span>{answer}</span>
-                  {candidateDecision?.answer === answer && <Check size={12} />}
+                  {assessmentDecision?.answer === answer && <Check size={12} />}
                 </button>
               );
             })}
@@ -533,19 +569,30 @@ export default function PhoneController() {
                 : snapshot?.prepared === false
                   ? "Preparing the laptop's flight traces."
                   : snapshot?.phase === "paused"
-                    ? "Exercise held. Resume on the laptop to tag."
+                    ? snapshot.holdReason ||
+                      "Exercise held. Resume on the laptop to tag."
                     : snapshot?.phase === "replay"
                       ? "Replay is read-only. Tags cannot change results."
                       : snapshot?.phase === "preview"
                         ? "Explore freely. Start the exercise on the laptop to tag."
                         : !live
                           ? `Contacts arrive at ${formatTime(snapshot?.scenario.arrival || 0)}.`
-                          : candidateDecision?.detection != null
-                            ? `Tagged at ${formatTime(candidateDecision.detection)}. Choose an identity above.`
-                            : "Tag the contact, then choose its identity."}
+                          : assessmentId !== candidate &&
+                              assessmentDecision?.detection != null
+                            ? `Tag ${candidate === null ? "the next contact" : trackLabel(candidate)} next. Identity labels above apply to ${trackLabel(assessmentId!)}.`
+                            : candidateDecision?.detection != null
+                              ? `Tagged at ${formatTime(candidateDecision.detection)}. Choose an identity above.`
+                              : "Tag the contact, then choose its identity."}
           </p>
           <div className="controller-tracks-title">
             <span>TRACK REGISTER</span>
+            <button
+              className="controller-auto-next"
+              aria-pressed={autoNext}
+              onClick={() => setAutoNext((value) => !value)}
+            >
+              Auto next {autoNext ? "on" : "off"}
+            </button>
             <span>{snapshot?.contacts?.length ?? 0} returns</span>
           </div>
           <div
@@ -585,9 +632,11 @@ export default function PhoneController() {
             <Smartphone size={19} />
             <div>
               <strong>
-                {sensors.enabled && sensors.display.orientation
+                {sensors.health === "active"
                   ? "Gyro active"
-                  : "Touch control"}
+                  : sensors.enabled
+                    ? "Gyro recovering"
+                    : "Touch control"}
               </strong>
               <span>
                 {sensors.enabled
@@ -595,7 +644,7 @@ export default function PhoneController() {
                   : "Enable your phone's motion sensors"}
               </span>
             </div>
-            <button onClick={() => void sensors.enable()}>
+            <button onClick={() => void enableGyro()}>
               {sensors.enabled ? "Retry gyro" : "Enable gyro"}
             </button>
           </div>
@@ -794,7 +843,8 @@ export default function PhoneController() {
       </div>
       <div className="controller-feedback" role="status" aria-live="polite">
         <span className={pendingTag ? "receipt-pending" : ""}>
-          {sensors.error ||
+          {(snapshot?.phase === "paused" && snapshot.holdReason) ||
+            sensors.error ||
             notice ||
             "Laptop is the display. Your phone controls the view and tags contacts."}
         </span>

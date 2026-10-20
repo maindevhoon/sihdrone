@@ -22,6 +22,7 @@ export type PhoneSnapshot = {
   bearing?: number;
   status?: string;
   contacts?: PhoneContact[];
+  holdReason?: string;
 };
 export type PhoneAction =
   | { type: "observe"; track: number; epoch: number }
